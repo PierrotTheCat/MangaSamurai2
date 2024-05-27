@@ -5,5 +5,5 @@
         android:title="Choose Folder" />
     <item
         android:id="@+id/action_option2"
-        android:title="Option 2"/>
+        android:title="Color Filter" />
 </menu>

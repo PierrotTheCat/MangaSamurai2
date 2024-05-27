@@ -1,17 +1,25 @@
 package com.kurai.mangasamurai2
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.net.Uri
 import android.util.Log
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -26,7 +34,9 @@ import com.kurai.mangasamurai2.databinding.ActivityMainBinding
 import android.os.Bundle as nBundle
 import android.widget.Toast
 import kotlinx.coroutines.*
-
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdView
 
 
 class MainActivity : AppCompatActivity() {
@@ -40,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedFolderUri: Uri? = null
     private lateinit var progressBar: ProgressBar
     private lateinit var textView: TextView
+    private lateinit var adView: AdView
 
 
     private val PICK_FOLDER_REQUEST_CODE = 123
@@ -105,6 +116,12 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialisiere das Mobile Ads SDK
+        MobileAds.initialize(this) {}
+        adView = findViewById(R.id.adView)
+        val adRequest = AdRequest.Builder().build()
+        adView.loadAd(adRequest)
 
         textView = findViewById(R.id.text_home)
         textView.visibility = View.VISIBLE
@@ -221,19 +238,108 @@ class MainActivity : AppCompatActivity() {
         return when (item.itemId) {
             R.id.action_option1 -> {
                 // Aktion für Option 1
-                // Zeige die ProgressBar an, um den Ladevorgang anzuzeigen
                 progressBar.visibility = View.VISIBLE
                 pageList.clear()
-                Log.d("onviewcreated", "before")
                 openFolderPicker()
-                Log.d("onviewcreated", "after")
                 true
             }
             R.id.action_option2 -> {
-                // Aktion für Option 2
+                // Aktion für Option 2 - Zeige den Farbwähldialog an
+                showColorPickerDialog()
                 true
             }
             else -> super.onOptionsItemSelected(item)
         }
     }
+
+    private fun showColorPickerDialog() {
+        // Lade das Farbwähler-Layout
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.color_picker_dialog, null)
+
+        val seekBarRed = dialogView.findViewById<SeekBar>(R.id.seekBarRed)
+        val seekBarGreen = dialogView.findViewById<SeekBar>(R.id.seekBarGreen)
+        val seekBarBlue = dialogView.findViewById<SeekBar>(R.id.seekBarBlue)
+
+        var red = 0
+        var green = 0
+        var blue = 0
+
+        // Aktuelle Farbe anzeigen (du kannst diese Ansicht auch in deinem Layout hinzufügen)
+        val selectedColorTextView = TextView(this)
+        selectedColorTextView.text = "Aktuelle Farbe: #000000"
+        selectedColorTextView.setBackgroundColor(Color.rgb(red, green, blue))
+
+        // Erstelle den Dialog
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Choose a Color")
+            .setView(dialogView)
+            .setPositiveButton("OK") { _, _ ->
+                val selectedColor = Color.rgb(red, green, blue)
+                // Farbe ausgewählt, verwende sie wie gewünscht
+                // Wende die ausgewählte Farbe auf alle Bitmaps in der Liste an
+                applyColorToPanels(selectedColor)
+
+                Log.d("ColorPicker", "Ausgewählte Farbe: #$selectedColor")
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        // SeekBar-Listener, um die Farbe in Echtzeit zu ändern
+        val colorChangeListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                when (seekBar?.id) {
+                    R.id.seekBarRed -> red = progress
+                    R.id.seekBarGreen -> green = progress
+                    R.id.seekBarBlue -> blue = progress
+                }
+                val color = Color.rgb(red, green, blue)
+                selectedColorTextView.text = String.format("Aktuelle Farbe: #%06X", 0xFFFFFF and color)
+                selectedColorTextView.setBackgroundColor(color)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        }
+
+        // Setze die Listener für die SeekBars
+        seekBarRed.setOnSeekBarChangeListener(colorChangeListener)
+        seekBarGreen.setOnSeekBarChangeListener(colorChangeListener)
+        seekBarBlue.setOnSeekBarChangeListener(colorChangeListener)
+
+        // Zeige den Dialog
+        dialog.show()
+    }
+
+    private fun applyOverlayFilter(originalBitmap: Bitmap, color: Int): Bitmap {
+        // Erstelle ein neues Bitmap mit den gleichen Dimensionen wie das Original
+        val resultBitmap = Bitmap.createBitmap(
+            originalBitmap.width, originalBitmap.height, originalBitmap.config
+        )
+
+        // Erstelle einen Canvas, um auf das neue Bitmap zu zeichnen
+        val canvas = Canvas(resultBitmap)
+
+        // Zeichne das ursprüngliche Bitmap auf das neue Bitmap
+        canvas.drawBitmap(originalBitmap, 0f, 0f, null)
+
+        // Erstelle ein Paint-Objekt mit einem Overlay-ColorFilter
+        val paint = Paint()
+        paint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.OVERLAY)
+
+        // Zeichne die Farbe als Overlay über das Bild
+        canvas.drawBitmap(originalBitmap, 0f, 0f, paint)
+
+        // Gib das resultierende Bitmap zurück
+        return resultBitmap
+    }
+
+    private fun applyColorToPanels(selectedColor: Int) {
+        for (i in panelList.indices) {
+            val originalBitmap = panelList[i]
+            val tintedBitmap = applyOverlayFilter(originalBitmap, selectedColor)
+            panelList[i] = tintedBitmap // Ersetze das Original mit der eingefärbten Version
+        }
+    }
+
+
 }
