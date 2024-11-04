@@ -2,15 +2,21 @@ package com.kurai.mangasamurai2
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -37,6 +43,11 @@ import kotlinx.coroutines.*
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
+import com.google.android.material.color.MaterialColors
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
 
 
 class MainActivity : AppCompatActivity() {
@@ -51,7 +62,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var textView: TextView
     private lateinit var adView: AdView
-
+    var color: Int = Color.argb(120,120,120,120)
+    private var isZoomed = false // Flag, um zwischen normaler Ansicht und Zoom zu wechseln
+    private var matrix = Matrix()
+    private var savedMatrix = Matrix()
+    private var start = PointF()
+    private var dragMode = false
+    private var scaleFactor = 1.0f
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var dX = 0f
+    private var dY = 0f
+    private val longClickDuration = 1200L
+    private var isLongPress = false
+    private var longPressHandler: Handler? = null
+    private val zoomHandler = Handler(Looper.getMainLooper())
+    private var pendingZoomRunnable: Runnable? = null
+    private var targetScaleFactor = 1.0f
 
     private val PICK_FOLDER_REQUEST_CODE = 123
     private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -77,7 +104,7 @@ class MainActivity : AppCompatActivity() {
                         textView.text = "Tap to start. \n\nControls: tap to move to the next panel, long press to move back."
 
 
-                        val size = panelList.size
+                        /*val size = panelList.size
                         indexPanel--
                         imageView.setOnClickListener {
                             indexPanel++
@@ -96,7 +123,7 @@ class MainActivity : AppCompatActivity() {
                             imageView.setImageBitmap(panelList[indexPanel%size])
                             Log.d("imageViewListener", (indexPanel%size).toString())
                             true
-                        }
+                        }*/
                     }
 
 
@@ -137,6 +164,150 @@ class MainActivity : AppCompatActivity() {
         //Log.d("onviewcreated", "before")
         //openFolderPicker()
         //Log.d("onviewcreated", "after")
+
+        val imageView: ImageView = binding.imageView2
+
+
+
+        // Pinch-Zooming
+        val scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                // Aktualisiere das Ziel, ohne die Skalierung sofort anzupassen
+                targetScaleFactor *= detector.scaleFactor
+                targetScaleFactor = Math.max(1.0f, Math.min(targetScaleFactor, 5.0f))
+
+                // Entferne eventuell anstehende Zoom-Updates
+                pendingZoomRunnable?.let { zoomHandler.removeCallbacks(it) }
+
+                // Setze das verzögerte Zoom-Update
+                pendingZoomRunnable = Runnable {
+                    imageView.scaleX = targetScaleFactor
+                    imageView.scaleY = targetScaleFactor
+                }
+                zoomHandler.postDelayed(pendingZoomRunnable!!, 18) // Aktualisierung alle 50ms
+
+                return true
+            }
+        })
+
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var isDragging = false
+        val dragThreshold = 100 // Pixel, die das Panel über den sichtbaren Bereich hinaus bewegt werden kann
+
+
+        // Setze den OnTouchListener für das ImageView
+       imageView.setOnTouchListener { view, event ->
+            scaleGestureDetector.onTouchEvent(event) // Pinch-to-Zoom erkennen
+
+           val panelWidth = view.width
+           val panelHeight = view.height
+           val dragThreshold = Math.max(panelWidth, panelHeight) * 0.45f // Beispiel: 10% der Panelgröße
+
+
+           when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastTouchX = event.rawX
+                    lastTouchY = event.rawY
+                    dX = view.x - lastTouchX
+                    dY = view.y - lastTouchY
+
+                    isDragging = false
+                    isLongPress = true // Setze isLongPress auf true
+                    longPressHandler = Handler()
+                    longPressHandler?.postDelayed({
+                        if (isLongPress) {
+                            // Trigger Long-Press Aktion hier
+                            indexPanel--
+                            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                            textView.visibility = View.GONE
+                        }
+                    }, longClickDuration)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val deltaX = event.rawX - lastTouchX
+                    val deltaY = event.rawY - lastTouchY
+
+                    if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
+                        isDragging = true // Dragging erkannt
+                    }
+
+                    if (isDragging) {
+                        // Berechne die neue Position
+                        val newX = event.rawX + dX
+                        val newY = event.rawY + dY
+
+                        // Einschränkung der neuen Position
+                        val viewWidth = view.width
+                        val viewHeight = view.height
+                        val parentWidth = (view.parent as View).width
+                        val parentHeight = (view.parent as View).height
+
+                        // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
+                        val minX = -dragThreshold
+                        val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
+                        val minY = -dragThreshold
+                        val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
+
+                        // Begrenzen der X-Position
+                        val constrainedX = when {
+                            newX < minX -> minX // links
+                            newX > maxX -> maxX // rechts
+                            else -> newX // innerhalb der Grenzen
+                        }
+
+                        // Begrenzen der Y-Position
+                        val constrainedY = when {
+                            newY < minY -> minY // oben
+                            newY > maxY -> maxY // unten
+                            else -> newY // innerhalb der Grenzen
+                        }
+
+                        // Setze die neue Position des ImageView
+                        view.animate()
+                            .x(constrainedX)
+                            .y(constrainedY)
+                            .setDuration(0)
+                            .start()
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    view.isPressed = false
+                    longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+
+                    isLongPress = false // Setze isLongPress zurück
+
+                    if (!isDragging) {
+                        // Hier wird nur ein Klick behandelt
+                        if (event.eventTime - event.downTime < ViewConfiguration.getLongPressTimeout()) {
+                            // Wechsel zum nächsten Panel
+                            imageView.scaleX = 1f
+                            imageView.scaleY = 1f
+                            imageView.translationX = 0f
+                            imageView.translationY = 0f
+                            indexPanel++
+                            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                            textView.visibility = View.GONE
+                        }
+                    }
+                }
+            }
+            true
+        }
+
+
+
+
+        // OnClick und OnLongClickListener wie zuvor
+        /*imageView.setOnClickListener {
+            indexPanel++
+            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+        }*/
+
+        imageView.setOnLongClickListener {
+            if (indexPanel > 0) indexPanel-- else Toast.makeText(this, "Erste Seite erreicht.", Toast.LENGTH_LONG).show()
+            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+            true
+        }
 
         val navView: BottomNavigationView = binding.navView
 
@@ -259,22 +430,24 @@ class MainActivity : AppCompatActivity() {
         val seekBarRed = dialogView.findViewById<SeekBar>(R.id.seekBarRed)
         val seekBarGreen = dialogView.findViewById<SeekBar>(R.id.seekBarGreen)
         val seekBarBlue = dialogView.findViewById<SeekBar>(R.id.seekBarBlue)
+        val seekBarAlpha = dialogView.findViewById<SeekBar>(R.id.seekBarAlpha) // Neue SeekBar für Alpha
 
         var red = 0
         var green = 0
         var blue = 0
+        var alpha = 255 // Standard: volle Deckkraft
 
         // Aktuelle Farbe anzeigen (du kannst diese Ansicht auch in deinem Layout hinzufügen)
         val selectedColorTextView = TextView(this)
         selectedColorTextView.text = "Aktuelle Farbe: #000000"
-        selectedColorTextView.setBackgroundColor(Color.rgb(red, green, blue))
+        selectedColorTextView.setBackgroundColor(Color.argb(alpha, red, green, blue))
 
         // Erstelle den Dialog
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose a Color")
             .setView(dialogView)
             .setPositiveButton("OK") { _, _ ->
-                val selectedColor = Color.rgb(red, green, blue)
+                val selectedColor = Color.argb(alpha, red, green, blue)
                 // Farbe ausgewählt, verwende sie wie gewünscht
                 // Wende die ausgewählte Farbe auf alle Bitmaps in der Liste an
                 applyColorToPanels(selectedColor)
@@ -291,10 +464,13 @@ class MainActivity : AppCompatActivity() {
                     R.id.seekBarRed -> red = progress
                     R.id.seekBarGreen -> green = progress
                     R.id.seekBarBlue -> blue = progress
+                    R.id.seekBarAlpha -> alpha = progress // Setze den Alpha-Wert
                 }
-                val color = Color.rgb(red, green, blue)
+                color = Color.argb(alpha, red, green, blue)
                 selectedColorTextView.text = String.format("Aktuelle Farbe: #%06X", 0xFFFFFF and color)
                 selectedColorTextView.setBackgroundColor(color)
+
+
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -305,6 +481,7 @@ class MainActivity : AppCompatActivity() {
         seekBarRed.setOnSeekBarChangeListener(colorChangeListener)
         seekBarGreen.setOnSeekBarChangeListener(colorChangeListener)
         seekBarBlue.setOnSeekBarChangeListener(colorChangeListener)
+        seekBarAlpha.setOnSeekBarChangeListener(colorChangeListener) // Neue SeekBar für Alpha
 
         // Zeige den Dialog
         dialog.show()
@@ -340,6 +517,10 @@ class MainActivity : AppCompatActivity() {
             panelList[i] = tintedBitmap // Ersetze das Original mit der eingefärbten Version
         }
     }
+
+
+
+
 
 
 }
