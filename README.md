@@ -22,6 +22,9 @@ Therefore I tried to make a similar automated feature that can be universally ap
 <li>show new graphic novel/chapter: tap on the three dot menu, tap on "choose folder", choose a different folder, wait, tap to show first panel</li>
 <li>show next panel: tap on the display
 <li>show previous panel: long tap on the display</li>
+  <li>return to previous panel: long press on panel</li>
+  <li>zooming panel: pinching gesture</li>
+  <li>move panel: drag and drop</li>
 </ul>
 
 <h1>Notes</h1>
