@@ -48,13 +48,16 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
+import androidx.core.view.GestureDetectorCompat
+import java.util.Timer
+import kotlin.concurrent.timerTask
 
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     val i=0
-    var indexPanel: Int = 0
+    var indexPanel: Int = -1
     var indexPage: Int = 0
     private val pageList = ArrayList<DocumentFile>()
     val panelList = ArrayList<Bitmap>()
@@ -79,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     private val zoomHandler = Handler(Looper.getMainLooper())
     private var pendingZoomRunnable: Runnable? = null
     private var targetScaleFactor = 1.0f
+    private var isDragging = false
 
     private val PICK_FOLDER_REQUEST_CODE = 123
     private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -101,7 +105,7 @@ class MainActivity : AppCompatActivity() {
 
                         val imageView: ImageView = binding.imageView2
                         //progressBar.visibility = View.GONE
-                        textView.text = "Tap to start. \n\nControls: tap to move to the next panel, long press to move back."
+                        textView.text = "Tap to start. \n\nControls: tap to move to the next panel, long press to move back. Pinch or double tap to zoom."
 
 
                         /*val size = panelList.size
@@ -167,10 +171,59 @@ class MainActivity : AppCompatActivity() {
 
         val imageView: ImageView = binding.imageView2
 
+// Initialisiere GestureDetector für DoubleTap und SingleTap
+        val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                if(!isZoomed && !isDragging) {
+                    indexPanel--
+                    imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    textView.visibility = View.GONE
+                }
 
+                super.onLongPress(e)
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                // Bei DoubleTap zoomt das Bild zurück auf die Standardgröße
+                scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
+                imageView.scaleX = scaleFactor
+                imageView.scaleY = scaleFactor
+                return true
+            }
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+
+                isLongPress = false // Setze isLongPress zurück
+                // Aktion für Single Tap
+                if(isDragging==false) {
+                    if (e.eventTime - e.downTime < ViewConfiguration.getLongPressTimeout()) {
+                        // Wechsel zum nächsten Panel
+                        imageView.scaleX = 1f
+                        imageView.scaleY = 1f
+                        imageView.translationX = 0f
+                        imageView.translationY = 0f
+                        indexPanel++
+                        imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                        textView.visibility = View.GONE
+                    }
+                }
+                return true
+            }
+        })
 
         // Pinch-Zooming
         val scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                isZoomed = true
+                return super.onScaleBegin(detector)
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                isZoomed = false
+                super.onScaleEnd(detector)
+            }
+
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 // Aktualisiere das Ziel, ohne die Skalierung sofort anzupassen
                 targetScaleFactor *= detector.scaleFactor
@@ -184,113 +237,120 @@ class MainActivity : AppCompatActivity() {
                     imageView.scaleX = targetScaleFactor
                     imageView.scaleY = targetScaleFactor
                 }
-                zoomHandler.postDelayed(pendingZoomRunnable!!, 18) // Aktualisierung alle 50ms
+                zoomHandler.postDelayed(pendingZoomRunnable!!, 50) // Aktualisierung alle 50ms
 
                 return true
             }
         })
 
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
-        var isDragging = false
+        isDragging = false
         val dragThreshold = 100 // Pixel, die das Panel über den sichtbaren Bereich hinaus bewegt werden kann
 
 
         // Setze den OnTouchListener für das ImageView
-       imageView.setOnTouchListener { view, event ->
-            scaleGestureDetector.onTouchEvent(event) // Pinch-to-Zoom erkennen
-
-           val panelWidth = view.width
-           val panelHeight = view.height
-           val dragThreshold = Math.max(panelWidth, panelHeight) * 0.45f // Beispiel: 10% der Panelgröße
+        imageView.setOnTouchListener { view, event ->
+            // Wenn Pinch-to-Zoom aktiv ist, verarbeite nur das Zoomen
+            gestureDetector.onTouchEvent(event) // Double Tap, Single Tap
+            scaleGestureDetector.onTouchEvent(event)
 
 
-           when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    lastTouchX = event.rawX
-                    lastTouchY = event.rawY
-                    dX = view.x - lastTouchX
-                    dY = view.y - lastTouchY
+if(!isZoomed) {
+    val panelWidth = view.width
+    val panelHeight = view.height
+    val dragThreshold = Math.max(panelWidth, panelHeight) * 0.45f // Beispiel: 10% der Panelgröße
 
-                    isDragging = false
-                    isLongPress = true // Setze isLongPress auf true
-                    longPressHandler = Handler()
-                    longPressHandler?.postDelayed({
-                        if (isLongPress) {
-                            // Trigger Long-Press Aktion hier
-                            indexPanel--
-                            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                            textView.visibility = View.GONE
-                        }
-                    }, longClickDuration)
+    when (event.action) {
+        MotionEvent.ACTION_DOWN -> {
+            lastTouchX = event.rawX
+            lastTouchY = event.rawY
+            dX = view.x - lastTouchX
+            dY = view.y - lastTouchY
+
+            isDragging = false
+            isLongPress = true // Setze isLongPress auf true
+            longPressHandler = Handler()
+            longPressHandler?.postDelayed({
+                if (isLongPress == true && isDragging == false) {
+                    // Trigger Long-Press Aktion hier
+                    indexPanel--
+                    imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    textView.visibility = View.GONE
                 }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaX = event.rawX - lastTouchX
-                    val deltaY = event.rawY - lastTouchY
+            }, longClickDuration)
+        }
 
-                    if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
-                        isDragging = true // Dragging erkannt
-                    }
+        MotionEvent.ACTION_MOVE -> {
+            val deltaX = event.rawX - lastTouchX
+            val deltaY = event.rawY - lastTouchY
 
-                    if (isDragging) {
-                        // Berechne die neue Position
-                        val newX = event.rawX + dX
-                        val newY = event.rawY + dY
-
-                        // Einschränkung der neuen Position
-                        val viewWidth = view.width
-                        val viewHeight = view.height
-                        val parentWidth = (view.parent as View).width
-                        val parentHeight = (view.parent as View).height
-
-                        // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
-                        val minX = -dragThreshold
-                        val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
-                        val minY = -dragThreshold
-                        val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
-
-                        // Begrenzen der X-Position
-                        val constrainedX = when {
-                            newX < minX -> minX // links
-                            newX > maxX -> maxX // rechts
-                            else -> newX // innerhalb der Grenzen
-                        }
-
-                        // Begrenzen der Y-Position
-                        val constrainedY = when {
-                            newY < minY -> minY // oben
-                            newY > maxY -> maxY // unten
-                            else -> newY // innerhalb der Grenzen
-                        }
-
-                        // Setze die neue Position des ImageView
-                        view.animate()
-                            .x(constrainedX)
-                            .y(constrainedY)
-                            .setDuration(0)
-                            .start()
-                    }
-                }
-                MotionEvent.ACTION_UP -> {
-                    view.isPressed = false
-                    longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
-
-                    isLongPress = false // Setze isLongPress zurück
-
-                    if (!isDragging) {
-                        // Hier wird nur ein Klick behandelt
-                        if (event.eventTime - event.downTime < ViewConfiguration.getLongPressTimeout()) {
-                            // Wechsel zum nächsten Panel
-                            imageView.scaleX = 1f
-                            imageView.scaleY = 1f
-                            imageView.translationX = 0f
-                            imageView.translationY = 0f
-                            indexPanel++
-                            imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                            textView.visibility = View.GONE
-                        }
-                    }
-                }
+            if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
+                isDragging = true // Dragging erkannt
             }
+
+            if (isDragging) {
+                // Berechne die neue Position
+                val newX = event.rawX + dX
+                val newY = event.rawY + dY
+
+                // Einschränkung der neuen Position
+                val viewWidth = view.width
+                val viewHeight = view.height
+                val parentWidth = (view.parent as View).width
+                val parentHeight = (view.parent as View).height
+
+                // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
+                val minX = -dragThreshold
+                val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
+                val minY = -dragThreshold
+                val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
+
+                // Begrenzen der X-Position
+                val constrainedX = when {
+                    newX < minX -> minX // links
+                    newX > maxX -> maxX // rechts
+                    else -> newX // innerhalb der Grenzen
+                }
+
+                // Begrenzen der Y-Position
+                val constrainedY = when {
+                    newY < minY -> minY // oben
+                    newY > maxY -> maxY // unten
+                    else -> newY // innerhalb der Grenzen
+                }
+
+                // Setze die neue Position des ImageView
+                view.animate()
+                    .x(constrainedX)
+                    .y(constrainedY)
+                    .setDuration(0)
+                    .start()
+            }
+
+        }
+
+        MotionEvent.ACTION_UP -> {
+            view.isPressed = false
+            longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+
+            isLongPress = false // Setze isLongPress zurück
+            isDragging = false
+            if (!isDragging) {
+                // Hier wird nur ein Klick behandelt
+                /* if (event.eventTime - event.downTime < ViewConfiguration.getLongPressTimeout()) {
+                             // Wechsel zum nächsten Panel
+                             imageView.scaleX = 1f
+                             imageView.scaleY = 1f
+                             imageView.translationX = 0f
+                             imageView.translationY = 0f
+                             indexPanel++
+                             imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                             textView.visibility = View.GONE
+                         }*/
+            }
+        }
+    }
+}
             true
         }
 
@@ -303,11 +363,11 @@ class MainActivity : AppCompatActivity() {
             imageView.setImageBitmap(panelList[indexPanel % panelList.size])
         }*/
 
-        imageView.setOnLongClickListener {
+        /*imageView.setOnLongClickListener {
             if (indexPanel > 0) indexPanel-- else Toast.makeText(this, "Erste Seite erreicht.", Toast.LENGTH_LONG).show()
             imageView.setImageBitmap(panelList[indexPanel % panelList.size])
             true
-        }
+        }*/
 
         val navView: BottomNavigationView = binding.navView
 
