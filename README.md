@@ -23,9 +23,10 @@ Therefore I tried to make a similar automated feature that can be universally ap
   <li>show next panel: tap on the display
   <li>show previous panel: long tap on the display</li>
   <li>return to previous panel: long press on panel</li>
-  <li>zooming panel: pinching gesture</li>
+  <li>zooming panel: pinching gesture or double tap</li>
   <li>move panel: drag and drop</li>
-  <li>automatic reading mode: start and stop over the menu</li>
+  <li>automatic reading mode: start it over the menu to change the panel every 10 seconds, tap the same menu item to stop, other controls still work during this mode</li>
+  <li>dynamic color scheme </li>
 </ul>
 
 <h1>Notes</h1>
@@ -33,4 +34,5 @@ Therefore I tried to make a similar automated feature that can be universally ap
 <li>No graphic novel pages are included</li>
 <li>all graphic novel pages in the folder are sorted and cut in the order of their file names</li>
 <li>make sure the names of the pages look like this: 001.jpg, 002.jpg,...</li>
+  <li>tested on Samsung smartphone and tablet</li>
 </ul>
