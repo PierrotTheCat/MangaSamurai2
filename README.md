@@ -17,7 +17,7 @@ Therefore I tried to make a similar automated feature that can be universally ap
 <li>tap the display to show the first panel</li>
 </ul>
 
-<h2>Controls</h2>
+<h2>Controls and Features</h2>
 <ul>
   <li>show new graphic novel/chapter: tap on the three dot menu, tap on "choose folder", choose a different folder, wait, tap to show first panel</li>
   <li>show next panel: tap on the display
