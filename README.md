@@ -12,9 +12,10 @@ My app aditionally features an automatic reading mode that displays the next pan
   <li>return to previous panel: long press on panel</li>
   <li>zooming panel: pinching gesture or double tap</li>
   <li>move panel: drag and drop</li>
-  <li>automatic reading mode: start it over the menu to change the panel automatically and dynamically every 7 - 30 seconds depending on the panel shape and size, tap the same menu item to stop, other controls still work during this mode</li>
-  <li>dynamic color theme adapts to your material you color scheme</li>
+  <li>automatic reading mode: start it over the menu to change the panel automatically and dynamically every 6 - 22 seconds depending on the panel shape and size, tap the same menu item to stop, other controls still work during this mode</li>
+  <li>dynamic color: theme adapts to your Material You color scheme</li>
   <li>color filter overlay: open the menu, tap on color filter, adjust the argb values, save and tap on the panel to apply the color overlay</li>
+  <li>fullscreen view: fling the panel upwards quickly to hide the menubar, fling downwards to make it reappear</li>
 </ul>
 
 <h2>Detailed Instructions</h2>
