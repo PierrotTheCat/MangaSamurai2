@@ -2,8 +2,10 @@ package com.kurai.mangasamurai2
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -15,8 +17,10 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -48,12 +52,30 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.GestureDetectorCompat
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.util.Timer
 import kotlin.concurrent.timerTask
+import android.Manifest
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
+import android.text.InputType
+import android.view.animation.LinearInterpolator
+import android.widget.EditText
+import androidx.lifecycle.LifecycleObserver
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.appopen.AppOpenAd
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import java.util.TimerTask
 
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), LifecycleObserver {
 
     private lateinit var binding: ActivityMainBinding
     val i=0
@@ -83,6 +105,18 @@ class MainActivity : AppCompatActivity() {
     private var pendingZoomRunnable: Runnable? = null
     private var targetScaleFactor = 1.0f
     private var isDragging = false
+    private val REQUEST_CODE = 100
+    private var isPanelSwitchingActive = false
+    private var panelSwitchTimer: Timer? = null
+    private var panelSwitchInterval: Long = 10000L
+    private lateinit var progressBarPanel: ProgressBar
+    private var progressTask: TimerTask? = null
+    private var appOpenAd: AppOpenAd? = null
+    private var timerMultiplier: Float = 1.0f // Standardwert
+    // Variable, um die Toolbar-Sichtbarkeit zu speichern
+    private var isToolbarVisible = true
+    // Variable, um Swipe und Drag zu trennen
+    private var isSwiping = false
 
     private val PICK_FOLDER_REQUEST_CODE = 123
     private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -150,9 +184,6 @@ class MainActivity : AppCompatActivity() {
 
         // Initialisiere das Mobile Ads SDK
         MobileAds.initialize(this) {}
-        adView = findViewById(R.id.adView)
-        val adRequest = AdRequest.Builder().build()
-        adView.loadAd(adRequest)
 
         textView = findViewById(R.id.text_home)
         textView.visibility = View.VISIBLE
@@ -162,6 +193,10 @@ class MainActivity : AppCompatActivity() {
 
         // Setze die Sichtbarkeit der ProgressBar auf GONE, um sie zunächst unsichtbar zu machen
         progressBar.visibility = View.GONE
+
+        // ProgressBar initialisieren
+        progressBarPanel = findViewById(R.id.progressBarPanel)
+        fadeOutProgressBar()
 
         DeepPanel.initialize(this)
 
@@ -206,9 +241,57 @@ class MainActivity : AppCompatActivity() {
                         indexPanel++
                         imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                         textView.visibility = View.GONE
+
+
                     }
                 }
                 return true
+            }
+
+            /*override fun onScroll(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                distanceX: Float,
+                distanceY: Float
+            ): Boolean {
+                // Wischen nach oben/unten: Toolbar ein-/ausblenden
+                if (kotlin.math.abs(distanceY) > kotlin.math.abs(distanceX)) {
+                    // Vertikales Scrollen erkannt
+                    if (distanceY > 0) {
+                        // Wischen nach oben: Toolbar ausblenden
+                        if (isToolbarVisible) toggleToolbar()
+                    } else {
+                        // Wischen nach unten: Toolbar einblenden
+                        if (!isToolbarVisible) toggleToolbar()
+                    }
+                    return true
+                }
+                return false
+            }*/
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                // Fling (schnelle vertikale Bewegung): Toolbar ein-/ausblenden
+                if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) && kotlin.math.abs(velocityY) > 300) {
+                    isSwiping = true // Swipe erkannt
+                    if (velocityY > 0 && !isToolbarVisible) {
+                        // Nach unten wischen: Toolbar einblenden
+                        toggleToolbar()
+                    } else if (velocityY < 0 && isToolbarVisible) {
+                        // Nach oben wischen: Toolbar ausblenden
+                        toggleToolbar()
+                    }
+                    // Nach dem Touch-Event Swipe zurücksetzen
+                    if (e2.action == MotionEvent.ACTION_UP || e2.action == MotionEvent.ACTION_CANCEL) {
+                        isSwiping = false
+                    }
+                    return true
+                }
+                return false
             }
         })
 
@@ -281,51 +364,60 @@ if(!isZoomed) {
         }
 
         MotionEvent.ACTION_MOVE -> {
-            val deltaX = event.rawX - lastTouchX
-            val deltaY = event.rawY - lastTouchY
+            // Drag-and-Drop nur erlauben, wenn kein Swipe aktiv ist
+            if (!isSwiping) {
+                val deltaX = event.rawX - lastTouchX
+                val deltaY = event.rawY - lastTouchY
 
-            if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
-                isDragging = true // Dragging erkannt
-            }
-
-            if (isDragging) {
-                // Berechne die neue Position
-                val newX = event.rawX + dX
-                val newY = event.rawY + dY
-
-                // Einschränkung der neuen Position
-                val viewWidth = view.width
-                val viewHeight = view.height
-                val parentWidth = (view.parent as View).width
-                val parentHeight = (view.parent as View).height
-
-                // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
-                val minX = -dragThreshold
-                val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
-                val minY = -dragThreshold
-                val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
-
-                // Begrenzen der X-Position
-                val constrainedX = when {
-                    newX < minX -> minX // links
-                    newX > maxX -> maxX // rechts
-                    else -> newX // innerhalb der Grenzen
+                if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
+                    isDragging = true // Dragging erkannt
                 }
 
-                // Begrenzen der Y-Position
-                val constrainedY = when {
-                    newY < minY -> minY // oben
-                    newY > maxY -> maxY // unten
-                    else -> newY // innerhalb der Grenzen
+                if (isDragging) {
+                    // Berechne die neue Position
+                    val newX = event.rawX + dX
+                    val newY = event.rawY + dY
+
+                    // Einschränkung der neuen Position
+                    val viewWidth = view.width
+                    val viewHeight = view.height
+                    val parentWidth = (view.parent as View).width
+                    val parentHeight = (view.parent as View).height
+
+                    // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
+                    val minX = -dragThreshold
+                    val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
+                    val minY = -dragThreshold
+                    val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
+
+                    // Begrenzen der X-Position
+                    val constrainedX = when {
+                        newX < minX -> minX // links
+                        newX > maxX -> maxX // rechts
+                        else -> newX // innerhalb der Grenzen
+                    }
+
+                    // Begrenzen der Y-Position
+                    val constrainedY = when {
+                        newY < minY -> minY // oben
+                        newY > maxY -> maxY // unten
+                        else -> newY // innerhalb der Grenzen
+                    }
+
+                    // Setze die neue Position des ImageView
+                    view.animate()
+                        .x(constrainedX)
+                        .y(constrainedY)
+                        .setDuration(0)
+                        .start()
                 }
 
-                // Setze die neue Position des ImageView
-                view.animate()
-                    .x(constrainedX)
-                    .y(constrainedY)
-                    .setDuration(0)
-                    .start()
+                // Nach dem Touch-Event Swipe zurücksetzen
+                if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                    isSwiping = false
+                }
             }
+
 
         }
 
@@ -479,9 +571,61 @@ if(!isZoomed) {
                 showColorPickerDialog()
                 true
             }
+            R.id.menu_save_panel -> {
+                saveCurrentPanel()
+                return true
+            }
+            R.id.action_set_multiplier -> {
+                showMultiplierDialog()
+                true
+            }
+            R.id.action_auto_switch -> {
+                // Aktion für "Automatischer Panel-Wechsel"
+                togglePanelSwitching(item)
+                return true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
+
+    private fun saveCurrentPanel() {
+        val bitmap = panelList[indexPanel % panelList.size] // Das aktuelle Panel
+
+        val filename = "manga_panel_${System.currentTimeMillis()}.png"
+
+        try {
+            val outputStream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Scoped Storage für Android 10+ (API 29+)
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels")
+                }
+
+                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                uri?.let { contentResolver.openOutputStream(it) }
+                    ?: throw IOException("Fehler beim Erstellen der Datei.")
+            } else {
+                // Für ältere Android-Versionen (vor API 29)
+                val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels")
+                if (!directory.exists()) {
+                    directory.mkdirs()
+                }
+                val file = File(directory, filename)
+                FileOutputStream(file)
+            }
+
+            outputStream.use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+
+            Toast.makeText(this, "Panel erfolgreich gespeichert: $filename", Toast.LENGTH_SHORT).show()
+        } catch (e: IOException) {
+            e.printStackTrace()
+            Toast.makeText(this, "Fehler beim Speichern des Panels", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     private fun showColorPickerDialog() {
         // Lade das Farbwähler-Layout
@@ -578,9 +722,255 @@ if(!isZoomed) {
         }
     }
 
+    private fun checkAndRequestPermissions() {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            // Berechtigungen nur für ältere Versionen anfordern
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                    REQUEST_CODE
+                )
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Berechtigung erteilt", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Berechtigung verweigert", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun togglePanelSwitching(item: MenuItem) {
+        if (isPanelSwitchingActive) {
+            stopPanelSwitching()
+            item.title = "Automatic Panel Switching" // Titel zurücksetzen
+        } else {
+            startPanelSwitching()
+            item.title = "Stop Automatic Switching" // Titel ändern, um zu stoppen
+        }
+    }
+
+    fun calculateTimeForPanel(panelBitmap: Bitmap): Long {
+        val width = panelBitmap.width
+        val height = panelBitmap.height
+        val area = width * height
+
+        // Verhältnis von Höhe zu Breite
+        val aspectRatio = height.toDouble() / width
+
+        // Basiszeit berechnen
+        val baseTime = when {
+            area > 1_500_000 -> 20000L // Sehr große Panels: 20 Sekunden
+            area > 1_000_000 -> 15000L // Große Panels: 15 Sekunden
+            area > 500_000 -> 10000L   // Mittlere Panels: 10 Sekunden
+            else -> 6500L              // Kleine Panels: 5.5 Sekunden
+        }
+
+        // Zeit basierend auf Proportionen anpassen
+        val proportionalAdjustment = when {
+            aspectRatio > 2.0 -> 1.2   // Sehr hohes Panel: 20 % mehr Zeit
+            aspectRatio > 1.5 -> 1.1   // Moderat hohes Panel: 10 % mehr Zeit
+            aspectRatio < 0.5 -> 1.2   // Sehr breites Panel: 20 % mehr Zeit
+            aspectRatio < 0.8 -> 1.1   // Moderat breites Panel: 10 % mehr Zeit
+            else -> 1.0                // Normales Verhältnis: Keine Änderung
+        }
+
+        when {
+            area > 1_500_000 -> Log.d("area", "sehr großes Panel: 20 s")
+            area > 1_000_000 -> Log.d("area", "großes Panel: 15 s")
+            area > 500_000 -> Log.d("area", "mittleres Panel: 10 s")
+            else -> Log.d("area", "kleines Panel: 5.5 s")
+        }
+        when {
+            aspectRatio > 2.0 -> Log.d("aspectRatio", "Sehr hohes Panel: +20 %")
+            aspectRatio > 1.5 -> Log.d("aspectRatio", "Moderat hohes Panel: +10 %")
+            aspectRatio < 0.5 -> Log.d("aspectRatio", "Sehr breites Panel: +20 %")
+            aspectRatio < 0.8 -> Log.d("aspectRatio", "Moderat breites Panel: +10 %")
+            else -> Log.d("aspectRatio", "Normal hohes Panel: +0%")
+        }
+        
 
 
+        return (baseTime * proportionalAdjustment * timerMultiplier).toLong()
+    }
 
+    fun startPanelSwitching() {
+        if (!isPanelSwitchingActive) {
+            isPanelSwitchingActive = true
 
+            // ProgressBar sichtbar machen
+            fadeInProgressBar()
 
+            // Erster Panel-Wechsel und Animation starten
+            val currentBitmap = panelList[indexPanel % panelList.size]
+            binding.imageView2.setImageBitmap(currentBitmap)
+            animateProgressBar()
+        }
+    }
+
+    fun stopPanelSwitching() {
+        isPanelSwitchingActive = false
+        progressBarPanel.progress = 0 // Fortschritt zurücksetzen
+        // ProgressBar ausblenden
+        fadeOutProgressBar()
+    }
+
+    private fun startProgressBarAnimation(duration: Long) {
+        progressTask?.cancel()
+
+        progressBarPanel.progress = 0
+        progressBarPanel.max = 100
+        progressTask = object : TimerTask() {
+            private var progress = 0
+
+            override fun run() {
+                if (progress >= 100 || !isPanelSwitchingActive) {
+                    cancel()
+                    return
+                }
+
+                progress += (100 * 50 / duration).toInt() // Schrittweite für 50ms
+                runOnUiThread { progressBarPanel.progress = progress }
+            }
+        }
+
+        Timer().scheduleAtFixedRate(progressTask, 0, 50) // Fortschritt alle 50ms aktualisieren
+    }
+
+    private fun animateProgressBar() {
+        // Aktuelles Panel bestimmen
+        val currentBitmap = panelList[indexPanel % panelList.size]
+
+        // Dauer dynamisch berechnen
+        val duration = calculateTimeForPanel(currentBitmap)
+        Log.d("interval", (duration.toFloat()/1000f).toString())
+        Log.d("intermission", "------------")
+
+        // Ladebalken animieren
+        val animator = ObjectAnimator.ofInt(progressBarPanel, "progress", 0, 100)
+        animator.duration = duration
+        animator.interpolator = LinearInterpolator()
+
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (isPanelSwitchingActive) {
+                    // Panel wechseln
+                    indexPanel++
+                    val nextBitmap = panelList[indexPanel % panelList.size]
+                    binding.imageView2.setImageBitmap(nextBitmap)
+
+                    // Nächste Animation starten
+                    animateProgressBar()
+                }
+            }
+        })
+
+        animator.start()
+    }
+
+    fun fadeInProgressBar() {
+        binding.progressBarPanel.apply {
+            alpha = 0f
+            visibility = View.VISIBLE
+            animate().alpha(1f).setDuration(300).start()
+        }
+    }
+
+    fun fadeOutProgressBar() {
+        binding.progressBarPanel.animate().alpha(0f).setDuration(300).withEndAction {
+            binding.progressBarPanel.visibility = View.GONE
+        }.start()
+    }
+
+    fun loadAppOpenAd(context: Context) {
+        val adRequest = AdRequest.Builder().build()
+        AppOpenAd.load(
+            context,
+            "ca-app-pub-5980216243664680/7574411330",  // Ersetze durch deine echte Ad Unit ID
+            adRequest,
+            AppOpenAd.APP_OPEN_AD_ORIENTATION_PORTRAIT,
+            object : AppOpenAd.AppOpenAdLoadCallback() {
+                override fun onAdLoaded(ad: AppOpenAd) {
+                    appOpenAd = ad
+                    Log.d("AdMob", "App Open Ad geladen.")
+                }
+
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    Log.d("AdMob", "Fehler beim Laden der Anzeige: ${loadAdError.message}")
+                }
+            }
+        )
+        fun showAppOpenAd(activity: Activity) {
+            appOpenAd?.let {
+                it.show(activity)
+            } ?: Log.d("AdMob", "App Open Ad nicht verfügbar.")
+        }
+    }
+
+    fun showAppOpenAd(activity: Activity) {
+        appOpenAd?.let {
+            it.show(activity)
+        } ?: Log.d("AdMob", "App Open Ad nicht verfügbar.")
+    }
+
+    override fun onStart() {
+            super.onStart()
+            loadAppOpenAd(this)
+            showAppOpenAd(this)
+        }
+
+    private fun showMultiplierDialog() {
+        val dialog = AlertDialog.Builder(this)
+        dialog.setTitle("Set Timer Multiplier")
+
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.hint = "Min: 0.5 (Faster), Max: 3.0 (Slower), Normal: 1.0"
+        dialog.setView(input)
+
+        dialog.setPositiveButton("Set") { _, _ ->
+            val userInput = input.text.toString()
+            if (userInput.isNotEmpty()) {
+                val multiplier = userInput.toFloatOrNull() ?: 1.0f
+                if (multiplier in 0.5f..3.0f) {
+                    timerMultiplier = multiplier
+                    Toast.makeText(this, "Timer Speed set to x$timerMultiplier", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Value must be between 0.5 and 3.0", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dialog.setNegativeButton("Cancel", null)
+        dialog.show()
+    }
+
+    // Funktion, um die Toolbar ein- oder auszublenden
+    private fun toggleToolbar() {
+        if (isToolbarVisible) {
+            supportActionBar?.hide()
+            window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+        } else {
+            supportActionBar?.show()
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+        isToolbarVisible = !isToolbarVisible
+    }
 }

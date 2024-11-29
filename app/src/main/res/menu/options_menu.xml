@@ -1,9 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
     <item
         android:id="@+id/action_option1"
         android:title="Choose Folder" />
     <item
         android:id="@+id/action_option2"
         android:title="Color Filter" />
+    <item
+        android:id="@+id/menu_save_panel"
+        android:title="Save Current Panel" />
+    <item
+        android:id="@+id/action_set_multiplier"
+        android:title="Set Switching Speed"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_auto_switch"
+        android:title="Automatic Panel Switching" />
 </menu>
