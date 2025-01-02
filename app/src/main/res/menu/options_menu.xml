@@ -12,10 +12,13 @@
         android:id="@+id/menu_save_panel"
         android:title="Save Current Panel" />
     <item
+        android:id="@+id/action_auto_switch"
+        android:title="Start Automatic Panel Switching" />
+    <item
         android:id="@+id/action_set_multiplier"
         android:title="Set Switching Speed"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_auto_switch"
-        android:title="Automatic Panel Switching" />
+        android:id="@+id/action_toggle_reading_direction"
+        android:title="Switch Reading Direction" />
 </menu>

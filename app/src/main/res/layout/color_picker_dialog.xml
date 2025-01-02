@@ -45,5 +45,12 @@
         android:max="255"
         android:progress="255" />
 
+    <!-- Farbvorschau -->
+    <View
+        android:id="@+id/colorPreview"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_gravity="center"
+        android:background="#000000" />
 
 </LinearLayout>

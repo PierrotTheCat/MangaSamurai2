@@ -1,5 +1,9 @@
 package com.kurai.mangasamurai2
 
+import android.Manifest
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ContentValues
@@ -21,62 +25,57 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.text.InputType
 import android.util.Log
-import android.view.Gravity
+import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.animation.LinearInterpolator
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.view.GestureDetectorCompat
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.LifecycleObserver
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
 import androidx.navigation.ui.setupWithNavController
 import com.github.pedrovgs.deeppanel.DeepPanel
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.kurai.mangasamurai2.databinding.ActivityMainBinding
-import android.os.Bundle as nBundle
-import android.widget.Toast
-import kotlinx.coroutines.*
-import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
-import com.google.android.material.color.MaterialColors
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.view.ScaleGestureDetector
-import android.view.ViewConfiguration
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.core.view.GestureDetectorCompat
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.appopen.AppOpenAd
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.kurai.mangasamurai2.databinding.ActivityMainBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.launch
+import okhttp3.*
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.Timer
-import kotlin.concurrent.timerTask
-import android.Manifest
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ObjectAnimator
-import android.text.InputType
-import android.view.animation.LinearInterpolator
-import android.widget.EditText
-import androidx.lifecycle.LifecycleObserver
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.appopen.AppOpenAd
-import com.google.android.gms.ads.interstitial.InterstitialAd
-import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import java.util.TimerTask
-
+import android.os.Bundle as nBundle
 
 class MainActivity : AppCompatActivity(), LifecycleObserver {
 
+    private var colorize: Boolean = false
     private lateinit var binding: ActivityMainBinding
     val i=0
     var indexPanel: Int = -1
@@ -117,6 +116,9 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var isToolbarVisible = true
     // Variable, um Swipe und Drag zu trennen
     private var isSwiping = false
+    private var isReadingRightToLeft = true // Standardrichtung von links nach rechts
+    private var documentFile: DocumentFile? = null
+
 
     private val PICK_FOLDER_REQUEST_CODE = 123
     private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -126,12 +128,19 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
             data?.data?.also { uri ->
                 // ProgressBar anzeigen
                 progressBar.visibility = View.VISIBLE
+                documentFile = DocumentFile.fromTreeUri(this, uri)
+
 
                 // Coroutine starten, um den Schneidevorgang im Hintergrund auszuführen
                 CoroutineScope(Dispatchers.Default).launch {
                     // Hier den Schneidevorgang durchführen
                     selectedFolderUri = uri
-                    listFilesInFolder(selectedFolderUri!!)
+                    panelList.clear()
+                    //listFilesInFolder(selectedFolderUri!!)
+                    if (documentFile != null && documentFile!!.isDirectory) {
+                        processChapters(documentFile!!)
+                    }
+
 
                     // ProgressBar auf dem Haupt-UI-Thread ausblenden
                     runOnUiThread {
@@ -241,7 +250,6 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                         indexPanel++
                         imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                         textView.visibility = View.GONE
-
 
                     }
                 }
@@ -482,6 +490,69 @@ if(!isZoomed) {
         folderPickerLauncher.launch(intent)
     }
 
+    fun processChapters(rootFolder: DocumentFile) {
+        val subFolders = rootFolder.listFiles()
+            .filter { it.isDirectory } // Unterordner filtern
+
+        if (subFolders.isNotEmpty()) {
+            // Es gibt Unterordner: Kapitel einzeln verarbeiten
+            val chapters = subFolders.sortedBy { it.name }
+            for (chapter in chapters) {
+                Log.d("Chapter", "Kapitel: ${chapter.name}")
+                processPages(chapter)
+            }
+        } else {
+            // Keine Unterordner: Verarbeite den aktuellen Ordner als 1 Kapitel
+            Log.d("Chapter", "Kapitel: ${rootFolder.name ?: "Unbenannt"}")
+            processPages(rootFolder)
+        }
+    }
+
+    fun processPages(folder: DocumentFile) {
+        val imageExtensions = listOf("jpg", "jpeg", "png") // Unterstützte Bildformate
+        val pages = folder.listFiles()
+            .filter { it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions } // Filter auf Bilddateien
+            .sortedBy { it.name } // Nach Namen sortieren
+
+        val deepPanel = DeepPanel()
+
+        if (pages.isNotEmpty()) {
+            for (page in pages) {
+                Log.d("Page", "Seite: ${page.name}")
+                // Beispiel: Bilddaten extrahieren
+                val inputStream = contentResolver.openInputStream(page.uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+
+                // Hier kannst du die Bitmap verarbeiten, z. B. in eine Liste hinzufügen
+                val result = deepPanel.extractPanelsInfo(bitmap)
+                val temp = result.panels.panelsInfo
+
+                // Dynamische Sortierung basierend auf der Leserichtung
+                val sortedPanels = if (isReadingRightToLeft) {
+                    temp.sortedByDescending { it.right }.sortedBy { it.top } // Rechts nach links
+                } else {
+                    temp.sortedBy { it.left }.sortedBy { it.top } // Links nach rechts
+                }
+
+                // Panels der Liste hinzufügen
+                sortedPanels.forEach { panel ->
+                    Log.d(
+                        "DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
+                |Right: ${panel.right}, Bottom: ${panel.bottom}
+                |Width: ${panel.width}, Height: ${panel.height}
+            """.trimMargin()
+                    )
+                    panelList.add(
+                        Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
+                    )
+                }
+            }
+        } else {
+            Log.d("Page", "Keine Bilddateien in diesem Ordner gefunden.")
+        }
+    }
+
     private fun listFilesInFolder(folderUri: Uri) {
         Log.d("listfilesinfolder", "true")
 
@@ -520,20 +591,31 @@ if(!isZoomed) {
             val deepPanel = DeepPanel()
 
             for (page in pageList) {
-                var bitmap = BitmapFactory.decodeStream(
+                val bitmap = BitmapFactory.decodeStream(
                     this.contentResolver.openInputStream(page.uri)
                 )
 
                 val result = deepPanel.extractPanelsInfo(bitmap)
-                var temp = result.panels.panelsInfo
-                var temp2 = temp.sortedByDescending { it.left }
-                var temp3 = temp2.sortedBy { it.top }
-                temp3.forEach { panel ->
-                    Log.d("DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
-                        |Right: ${panel.right}, Bottom: ${panel.bottom}
-                        |Width: ${panel.width}, Height: ${panel.height}
-                    """.trimMargin())
-                    panelList.add(Bitmap.createBitmap(bitmap,panel.left,panel.top,panel.width,panel.height))
+                val temp = result.panels.panelsInfo
+
+                // Dynamische Sortierung basierend auf der Leserichtung
+                val sortedPanels = if (isReadingRightToLeft) {
+                    temp.sortedByDescending { it.right }.sortedBy { it.top } // Rechts nach links
+                } else {
+                    temp.sortedBy { it.left }.sortedBy { it.top } // Links nach rechts
+                }
+
+                // Panels der Liste hinzufügen
+                sortedPanels.forEach { panel ->
+                    Log.d(
+                        "DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
+                |Right: ${panel.right}, Bottom: ${panel.bottom}
+                |Width: ${panel.width}, Height: ${panel.height}
+            """.trimMargin()
+                    )
+                    panelList.add(
+                        Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
+                    )
                 }
             }
 
@@ -546,8 +628,10 @@ if(!isZoomed) {
         Log.d("onactivityresult", "true")
         if (requestCode == PICK_FOLDER_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
             data?.data?.also { uri ->
-                selectedFolderUri = uri
-                listFilesInFolder(selectedFolderUri!!)
+                val documentFile = DocumentFile.fromTreeUri(this, uri)
+                if (documentFile != null && documentFile.isDirectory) {
+                    processChapters(documentFile)
+                }
             }
         }
     }
@@ -584,6 +668,10 @@ if(!isZoomed) {
                 togglePanelSwitching(item)
                 return true
             }
+            R.id.action_toggle_reading_direction -> {
+                toggleReadingDirection()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -604,7 +692,7 @@ if(!isZoomed) {
 
                 val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                 uri?.let { contentResolver.openOutputStream(it) }
-                    ?: throw IOException("Fehler beim Erstellen der Datei.")
+                    ?: throw IOException("Error occurred while creating file")
             } else {
                 // Für ältere Android-Versionen (vor API 29)
                 val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels")
@@ -619,10 +707,10 @@ if(!isZoomed) {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
             }
 
-            Toast.makeText(this, "Panel erfolgreich gespeichert: $filename", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Panel successfully saved: $filename", Toast.LENGTH_SHORT).show()
         } catch (e: IOException) {
             e.printStackTrace()
-            Toast.makeText(this, "Fehler beim Speichern des Panels", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Error occurred while saving", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -635,16 +723,14 @@ if(!isZoomed) {
         val seekBarGreen = dialogView.findViewById<SeekBar>(R.id.seekBarGreen)
         val seekBarBlue = dialogView.findViewById<SeekBar>(R.id.seekBarBlue)
         val seekBarAlpha = dialogView.findViewById<SeekBar>(R.id.seekBarAlpha) // Neue SeekBar für Alpha
+        val colorPreview = dialogView.findViewById<View>(R.id.colorPreview)
 
         var red = 0
         var green = 0
         var blue = 0
         var alpha = 255 // Standard: volle Deckkraft
+        colorPreview.setBackgroundColor(Color.BLACK)
 
-        // Aktuelle Farbe anzeigen (du kannst diese Ansicht auch in deinem Layout hinzufügen)
-        val selectedColorTextView = TextView(this)
-        selectedColorTextView.text = "Aktuelle Farbe: #000000"
-        selectedColorTextView.setBackgroundColor(Color.argb(alpha, red, green, blue))
 
         // Erstelle den Dialog
         val dialog = AlertDialog.Builder(this)
@@ -671,8 +757,7 @@ if(!isZoomed) {
                     R.id.seekBarAlpha -> alpha = progress // Setze den Alpha-Wert
                 }
                 color = Color.argb(alpha, red, green, blue)
-                selectedColorTextView.text = String.format("Aktuelle Farbe: #%06X", 0xFFFFFF and color)
-                selectedColorTextView.setBackgroundColor(color)
+                colorPreview.setBackgroundColor(color)
 
 
             }
@@ -757,10 +842,10 @@ if(!isZoomed) {
     fun togglePanelSwitching(item: MenuItem) {
         if (isPanelSwitchingActive) {
             stopPanelSwitching()
-            item.title = "Automatic Panel Switching" // Titel zurücksetzen
+            item.title = "Start Automatic Panel Switching" // Titel zurücksetzen
         } else {
             startPanelSwitching()
-            item.title = "Stop Automatic Switching" // Titel ändern, um zu stoppen
+            item.title = "Stop Automatic Panel Switching" // Titel ändern, um zu stoppen
         }
     }
 
@@ -802,7 +887,7 @@ if(!isZoomed) {
             aspectRatio < 0.8 -> Log.d("aspectRatio", "Moderat breites Panel: +10 %")
             else -> Log.d("aspectRatio", "Normal hohes Panel: +0%")
         }
-        
+
 
 
         return (baseTime * proportionalAdjustment * timerMultiplier).toLong()
@@ -973,4 +1058,15 @@ if(!isZoomed) {
         }
         isToolbarVisible = !isToolbarVisible
     }
+
+    private fun toggleReadingDirection() {
+        isReadingRightToLeft = !isReadingRightToLeft
+        panelList.clear()
+        //listFilesInFolder(selectedFolderUri!!)
+        if (documentFile != null && documentFile!!.isDirectory) {
+            processChapters(documentFile!!)
+        }
+    }
+
+
 }

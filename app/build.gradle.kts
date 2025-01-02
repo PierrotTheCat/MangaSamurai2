@@ -37,8 +37,11 @@ android {
 }
 
 dependencies {
+    //implementation ("androidx.activity:activity-ktx:1.7.2")
+    //implementation ("androidx.documentfile:documentfile:1.1.0") // Für Zugriff auf Dateien und Ordner
 
-
+    implementation ("com.github.bumptech.glide:glide:4.13.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.android.gms:play-services-ads:22.0.0")
     implementation("com.github.pedrovgs:deeppanel:0.0.1")
     implementation(libs.androidx.core.ktx)
@@ -49,6 +52,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
+    implementation(libs.androidx.runner)
+    implementation(libs.androidx.espresso.core)
     //implementation(libs.play.services.ads.lite)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
