@@ -21,4 +21,7 @@
     <item
         android:id="@+id/action_toggle_reading_direction"
         android:title="Switch Reading Direction" />
+    <item
+        android:id="@+id/action_jump_to"
+        android:title="Jump To Panel ..." />
 </menu>

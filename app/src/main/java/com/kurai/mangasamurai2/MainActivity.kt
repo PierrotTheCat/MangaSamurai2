@@ -25,6 +25,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.text.Html
 import android.text.InputType
 import android.util.Log
 import android.view.GestureDetector
@@ -46,6 +47,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.GestureDetectorCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.LifecycleObserver
@@ -54,6 +56,7 @@ import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
 import androidx.navigation.ui.setupWithNavController
 import com.github.pedrovgs.deeppanel.DeepPanel
+import com.github.pedrovgs.deeppanel.Panel
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
@@ -72,8 +75,11 @@ import java.io.IOException
 import java.util.Timer
 import java.util.TimerTask
 import android.os.Bundle as nBundle
+import java.util.zip.ZipInputStream
+
 
 class MainActivity : AppCompatActivity(), LifecycleObserver {
+
 
     private var colorize: Boolean = false
     private lateinit var binding: ActivityMainBinding
@@ -118,7 +124,20 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var isSwiping = false
     private var isReadingRightToLeft = true // Standardrichtung von links nach rechts
     private var documentFile: DocumentFile? = null
+    private var showedHint = false
 
+    private fun displayImage(uri: Uri) {
+        Log.d("MainActivity", "Bild ausgewählt: $uri")
+        // Hier kannst du dein vorhandenes Panel-System aufrufen
+    }
+
+    private fun getFileName(uri: Uri): String {
+        return contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex("_display_name")
+            cursor.moveToFirst()
+            cursor.getString(nameIndex)
+        } ?: uri.lastPathSegment ?: "unknown"
+    }
 
     private val PICK_FOLDER_REQUEST_CODE = 123
     private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -142,36 +161,56 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                     }
 
 
-                    // ProgressBar auf dem Haupt-UI-Thread ausblenden
-                    runOnUiThread {
-                        progressBar.visibility = View.GONE
-
-                        val imageView: ImageView = binding.imageView2
-                        //progressBar.visibility = View.GONE
-                        textView.text = "Tap to start. \n\nControls: tap to move to the next panel, long press to move back. Pinch or double tap to zoom."
 
 
-                        /*val size = panelList.size
-                        indexPanel--
-                        imageView.setOnClickListener {
-                            indexPanel++
-                            imageView.setImageBitmap(panelList[indexPanel%size])
-                            Log.d("imageViewListener", (indexPanel%size).toString())
-                            textView.visibility = View.GONE
-                        }
-                        imageView.setOnLongClickListener{
-                            if(indexPanel>0) {
-                                indexPanel--
-                            } else {
-                                val message = "Erste Seite erreicht."
-                                val toast = Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
-                                toast.show()
+                        // ProgressBar auf dem Haupt-UI-Thread ausblenden
+                        runOnUiThread {
+                            progressBar.visibility = View.GONE
+                            indexPanel = 0
+                            binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+                            binding.imageView2.visibility = View.VISIBLE
+                            textView.visibility = View.INVISIBLE
+                            // Hinweis anzeigen
+                            if (!showedHint) {
+                                showedHint = true
+                                showHintDialog()
                             }
-                            imageView.setImageBitmap(panelList[indexPanel%size])
-                            Log.d("imageViewListener", (indexPanel%size).toString())
-                            true
-                        }*/
-                    }
+                            //progressBar.visibility = View.GONE
+                            /*val instructionText = "Tap to start. Controls: <br><br>" +
+                                    "<b>Tap</b>: Move to the next panel.<br>" +
+                                    "<b>Long Press</b>: Go back to the previous panel.<br>" +
+                                    "<b>Double Tap</b>: Zoom in or out on the current panel.<br>" +
+                                    "<b>Drag</b>: Pan around a zoomed panel.<br>" +
+                                    "<b>Hide Taskbar</b>: Fling panel upwards/downwards to hide/show the taskbar<br>" +
+                                    "<b>Auto Mode</b>: Enable in the menu to automatically navigate through panels.<br><br>" +
+                                    "Enjoy your reading experience. \uD83C\uDF38\uD83D\uDDE1\uFE0F"
+                            textView.text = Html.fromHtml(instructionText, Html.FROM_HTML_MODE_LEGACY)*/
+
+
+                            /*val size = panelList.size
+                            indexPanel--
+                            imageView.setOnClickListener {
+                                indexPanel++
+                                imageView.setImageBitmap(panelList[indexPanel%size])
+                                Log.d("imageViewListener", (indexPanel%size).toString())
+                                textView.visibility = View.GONE
+                            }
+                            imageView.setOnLongClickListener{
+                                if(indexPanel>0) {
+                                    indexPanel--
+                                } else {
+                                    val message = "Erste Seite erreicht."
+                                    val toast = Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
+                                    toast.show()
+                                }
+                                imageView.setImageBitmap(panelList[indexPanel%size])
+                                Log.d("imageViewListener", (indexPanel%size).toString())
+                                true
+                            }*/
+                        }
+
+
+
 
 
 
@@ -219,7 +258,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onLongPress(e: MotionEvent) {
                 if(!isZoomed && !isDragging) {
-                    indexPanel--
+                    if (indexPanel>0) indexPanel--
                     imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                     textView.visibility = View.GONE
                 }
@@ -364,7 +403,7 @@ if(!isZoomed) {
             longPressHandler?.postDelayed({
                 if (isLongPress == true && isDragging == false) {
                     // Trigger Long-Press Aktion hier
-                    indexPanel--
+                    if (indexPanel>0) indexPanel--
                     imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                     textView.visibility = View.GONE
                 }
@@ -506,10 +545,11 @@ if(!isZoomed) {
             Log.d("Chapter", "Kapitel: ${rootFolder.name ?: "Unbenannt"}")
             processPages(rootFolder)
         }
+
     }
 
     fun processPages(folder: DocumentFile) {
-        val imageExtensions = listOf("jpg", "jpeg", "png") // Unterstützte Bildformate
+        val imageExtensions = listOf("jpg", "jpeg", "png", "webp") // Unterstützte Bildformate
         val pages = folder.listFiles()
             .filter { it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions } // Filter auf Bilddateien
             .sortedBy { it.name } // Nach Namen sortieren
@@ -528,12 +568,15 @@ if(!isZoomed) {
                 val result = deepPanel.extractPanelsInfo(bitmap)
                 val temp = result.panels.panelsInfo
 
-                // Dynamische Sortierung basierend auf der Leserichtung
+                /*// Dynamische Sortierung basierend auf der Leserichtung
                 val sortedPanels = if (isReadingRightToLeft) {
-                    temp.sortedByDescending { it.right }.sortedBy { it.top } // Rechts nach links
+                    temp.sortedBy { it.top }.sortedByDescending { it.right } // Rechts nach links
                 } else {
-                    temp.sortedBy { it.left }.sortedBy { it.top } // Links nach rechts
-                }
+                    temp.sortedBy { it.top }.sortedBy { it.left } // Links nach rechts
+                }*/
+                val sortedPanels = temp.sortedWith(compareBy<Panel> { it.top }
+                    .thenBy { if (isReadingRightToLeft) -it.right else it.left })
+
 
                 // Panels der Liste hinzufügen
                 sortedPanels.forEach { panel ->
@@ -647,6 +690,7 @@ if(!isZoomed) {
                 // Aktion für Option 1
                 progressBar.visibility = View.VISIBLE
                 pageList.clear()
+                binding.imageView2.visibility = View.INVISIBLE
                 openFolderPicker()
                 true
             }
@@ -671,6 +715,10 @@ if(!isZoomed) {
             R.id.action_toggle_reading_direction -> {
                 toggleReadingDirection()
                 true
+            }
+            R.id.action_jump_to -> {
+                showJumpToDialog()
+                return true
             }
             else -> super.onOptionsItemSelected(item)
         }
@@ -1068,5 +1116,64 @@ if(!isZoomed) {
         }
     }
 
+    private fun showJumpToDialog() {
+        val dialogBuilder = AlertDialog.Builder(this)
+        dialogBuilder.setTitle("Jump to...")
 
+        // Eingabefeld für die Panel- oder Seitennummer
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = "Enter Panel Number from 1 to ${panelList.size}"
+        }
+        dialogBuilder.setView(input)
+
+        // Positive Schaltfläche zum Springen
+        dialogBuilder.setPositiveButton("Jump") { _, _ ->
+            val inputText = input.text.toString()
+            val panelIndex = inputText.toIntOrNull()
+
+            if (panelIndex != null && panelIndex in 1..panelList.size) {
+                jumpToPanel(panelIndex - 1) // Panels sind 0-basiert
+            } else {
+                Toast.makeText(this, "Index Out of Bounds: ${inputText}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Negative Schaltfläche zum Abbrechen
+        dialogBuilder.setNegativeButton("Cancel") { dialog, _ ->
+            dialog.dismiss()
+        }
+
+        // Dialog anzeigen
+        dialogBuilder.create().show()
+    }
+
+    private fun jumpToPanel(panelIndex: Int) {
+        indexPanel = panelIndex
+        displayPanel(panelList[panelIndex])
+    }
+
+    private fun displayPanel(panelBitmap: Bitmap) {
+        runOnUiThread {
+            binding.imageView2.setImageBitmap(panelBitmap)
+        }
+    }
+
+    private fun showHintDialog() {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Controls")
+        val instructionText = "Tap: Move to the next panel.\n" +
+                "Long Press: Go back to the previous panel.\n" +
+                "Double Tap: Zoom in or out on the current panel.\n" +
+                "Drag: Pan around a zoomed panel.\n" +
+                "Hide Taskbar: Fling panel upwards/downwards to hide/show the taskbar\n" +
+                "Auto Mode: Enable in the menu to automatically navigate through panels.\n\n" +
+                "Enjoy your reading experience. \uD83C\uDF38\uD83D\uDDE1\uFE0F"
+        builder.setMessage(instructionText)
+        builder.setPositiveButton("Understood") { dialog, _ ->
+            dialog.dismiss() // Schließt den Dialog
+        }
+        builder.setCancelable(false) // Dialog kann nicht durch Tippen außerhalb geschlossen werden
+        builder.show()
+    }
 }
