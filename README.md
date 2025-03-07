@@ -1,6 +1,6 @@
 <h1>Inspiration</h1>
 I love the Amazon Kindle Guided View, which zooms into interesting parts of the pages of graphic novels (mangas and comics). It provides a cinematic reading experience and highlights details that can be easily overlooked on small displays but it is limited to selected series. </n></n>
-Therefore I tried to make a similar automated feature that can be universally applied.</n></n>
+Therefore I tried to make a similar automated feature that can be universally applied und helps avoid page-wide spoilers.</n></n>
 My app aditionally features an automatic reading mode that displays the next panel after a dynamic amount of time, depending on the size and shape of the panel.
 
 <h1>How to use</h1>
@@ -20,7 +20,7 @@ My app aditionally features an automatic reading mode that displays the next pan
 
 <h2>Detailed Instructions</h2>
 <ul>
-<li>save the graphic novel pages you want to cut as .jpg or .png files in a folder on your Android smartphone or tablet</li>
+<li>save the graphic novel pages you want to cut as .jpg, .jpeg, .webp or .png files in a folder on your Android smartphone or tablet</li>
 <li>make sure the names of the pages look like this: 001.jpg, 002.jpg,...</li>
 <li>download and install the apk, if you haven't already</li>
 <li>start the app</li>
