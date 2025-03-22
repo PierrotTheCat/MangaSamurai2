@@ -66,7 +66,13 @@
             android:id="@+id/progressBarPanel"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="4dp" />
+            android:layout_height="4dp"
+            android:visibility="gone"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="@color/white"
+            android:progressBackgroundTint="@color/black" />
+
     </FrameLayout>
 
 

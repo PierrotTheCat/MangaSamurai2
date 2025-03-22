@@ -10,6 +10,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -125,6 +126,10 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var isReadingRightToLeft = true // Standardrichtung von links nach rechts
     private var documentFile: DocumentFile? = null
     private var showedHint = false
+    private var startTime: Long = 0
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var progressTaskRunnable: Runnable? = null
 
     private fun displayImage(uri: Uri) {
         Log.d("MainActivity", "Bild ausgewählt: $uri")
@@ -276,22 +281,12 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
-
                 isLongPress = false // Setze isLongPress zurück
-                // Aktion für Single Tap
-                if(isDragging==false) {
-                    if (e.eventTime - e.downTime < ViewConfiguration.getLongPressTimeout()) {
-                        // Wechsel zum nächsten Panel
-                        imageView.scaleX = 1f
-                        imageView.scaleY = 1f
-                        imageView.translationX = 0f
-                        imageView.translationY = 0f
-                        indexPanel++
-                        imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                        textView.visibility = View.GONE
 
-                    }
+                if (!isDragging && e.eventTime - e.downTime < ViewConfiguration.getLongPressTimeout()) {
+                    onManualPanelSwitch() // Panel-Wechsel über die neue Methode
                 }
+
                 return true
             }
 
@@ -951,7 +946,9 @@ if(!isZoomed) {
             // Erster Panel-Wechsel und Animation starten
             val currentBitmap = panelList[indexPanel % panelList.size]
             binding.imageView2.setImageBitmap(currentBitmap)
-            animateProgressBar()
+
+            // Hier wird die Fortschrittsbalken-Animation aufgerufen
+            startProgressBarAnimation(calculateTimeForPanel(currentBitmap))
         }
     }
 
@@ -963,43 +960,93 @@ if(!isZoomed) {
     }
 
     private fun startProgressBarAnimation(duration: Long) {
-        progressTask?.cancel()
+        progressTaskRunnable?.let { handler.removeCallbacks(it) } // Vorherige Task abbrechen
 
         progressBarPanel.progress = 0
         progressBarPanel.max = 100
-        progressTask = object : TimerTask() {
-            private var progress = 0
+        progressBarPanel.visibility = View.VISIBLE
 
+        startTime = System.currentTimeMillis()
+
+        progressTaskRunnable = object : Runnable {
             override fun run() {
-                if (progress >= 100 || !isPanelSwitchingActive) {
-                    cancel()
+                if (!isPanelSwitchingActive) {
+                    progressBarPanel.visibility = View.GONE
+                    return // ❌ Stoppen, falls deaktiviert
+                }
+
+                val elapsed = System.currentTimeMillis() - startTime
+                val progress = (elapsed * 100 / duration).toInt()
+
+                if (progress >= 100) {
+                    progressBarPanel.progress = 100
+                    progressBarPanel.visibility = View.GONE
+
+                    // 👉 Panel wechseln
+                    showNextPanel()
+
+                    // 🚀 NEU: Prüfen, ob es noch aktiv ist!
+                    if (isPanelSwitchingActive) {
+                        startProgressBarAnimation(duration) // Nur dann neu starten!
+                    }
                     return
                 }
 
-                progress += (100 * 50 / duration).toInt() // Schrittweite für 50ms
-                runOnUiThread { progressBarPanel.progress = progress }
+                progressBarPanel.progress = progress
+                handler.postDelayed(this, 50)
             }
         }
 
-        Timer().scheduleAtFixedRate(progressTask, 0, 50) // Fortschritt alle 50ms aktualisieren
+        handler.post(progressTaskRunnable!!)
     }
 
-    private fun animateProgressBar() {
+
+    private fun showNextPanel() {
+        binding.imageView2.scaleX = 1f
+        binding.imageView2.scaleY = 1f
+        binding.imageView2.translationX = 0f
+        binding.imageView2.translationY = 0f
+        indexPanel++
+        binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        textView.visibility = View.GONE
+    }
+
+
+
+
+    fun onManualPanelSwitch() {
+        // Stoppe den aktuellen Timer und die Fortschrittsanimation
+        stopPanelSwitching()
+
+        binding.imageView2.scaleX = 1f
+        binding.imageView2.scaleY = 1f
+        binding.imageView2.translationX = 0f
+        binding.imageView2.translationY = 0f
+        indexPanel++
+        binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        textView.visibility = View.GONE
+
+        // Falls der automatische Modus aktiv ist, Timer zurücksetzen und neu starten
+        if (isPanelSwitchingActive) {
+            startPanelSwitching()
+        }
+    }
+
+
+
+    fun animateProgressBar() {
         // Aktuelles Panel bestimmen
         val currentBitmap = panelList[indexPanel % panelList.size]
 
         // Dauer dynamisch berechnen
         val duration = calculateTimeForPanel(currentBitmap)
-        Log.d("interval", (duration.toFloat()/1000f).toString())
-        Log.d("intermission", "------------")
+        Log.d("interval", (duration.toFloat() / 1000f).toString())
 
         // Ladebalken animieren
-        val animator = ObjectAnimator.ofInt(progressBarPanel, "progress", 0, 100)
-        animator.duration = duration
-        animator.interpolator = LinearInterpolator()
-
-        animator.addListener(object : AnimatorListenerAdapter() {
-            override fun onAnimationEnd(animation: Animator) {
+        binding.progressBarPanel.animate()
+            .setDuration(duration)
+            .alpha(1f)
+            .withEndAction {
                 if (isPanelSwitchingActive) {
                     // Panel wechseln
                     indexPanel++
@@ -1010,14 +1057,12 @@ if(!isZoomed) {
                     animateProgressBar()
                 }
             }
-        })
-
-        animator.start()
+            .start()
     }
+
 
     fun fadeInProgressBar() {
         binding.progressBarPanel.apply {
-            alpha = 0f
             visibility = View.VISIBLE
             animate().alpha(1f).setDuration(300).start()
         }
@@ -1028,6 +1073,7 @@ if(!isZoomed) {
             binding.progressBarPanel.visibility = View.GONE
         }.start()
     }
+
 
     fun loadAppOpenAd(context: Context) {
         val adRequest = AdRequest.Builder().build()
