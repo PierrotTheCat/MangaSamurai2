@@ -127,6 +127,9 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var documentFile: DocumentFile? = null
     private var showedHint = false
     private var startTime: Long = 0
+    private var pausedProgress = 0.0 // Speichert den aktuellen Fortschritt
+    private var isPaused = false // Status-Flag
+    private var remainingTime = 0L // Speichert verbleibende Zeit
 
     private val handler = Handler(Looper.getMainLooper())
     private var progressTaskRunnable: Runnable? = null
@@ -413,6 +416,7 @@ if(!isZoomed) {
 
                 if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
                     isDragging = true // Dragging erkannt
+                    pausePanelSwitchForDrag() // ❄ Pause aktivieren
                 }
 
                 if (isDragging) {
@@ -1074,6 +1078,79 @@ if(!isZoomed) {
         }.start()
     }
 
+    private fun pausePanelSwitchForDrag() {
+        Log.d("PanelSwitch", "Pause gestartet") // Log zur Pause
+        progressTaskRunnable?.let { handler.removeCallbacks(it) } // Stoppe die Animation
+        pausedProgress = progressBarPanel.progress.toDouble() // Speichere den aktuellen Fortschritt
+        remainingTime = ((100 - pausedProgress) * calculateTimeForPanel(panelList[indexPanel % panelList.size]) / 100).toLong() // Berechne verbleibende Zeit
+        Log.d("PanelSwitch", "Fortschritt gespeichert: $pausedProgress, verbleibende Zeit: $remainingTime") // Log zur Berechnung
+
+        isPaused = true // Merke, dass eine Pause aktiv ist
+
+        handler.postDelayed({
+            Log.d("PanelSwitch", "3 Sekunden Pause vorbei, fortfahren...")
+            if (isPanelSwitchingActive) { // Falls Panel-Wechsel aktiv ist, fortsetzen
+                resumeProgressBarAnimation()
+            }
+        }, 3000) // 3 Sekunden Verzögerung
+    }
+
+    private fun startProgressBarAnimation(duration: Long, startProgress: Double = 0.0) {
+        Log.d("PanelSwitch", "Animation starten mit Fortschritt: $startProgress und Dauer: $duration") // Log zum Start der Animation
+        progressTaskRunnable?.let { handler.removeCallbacks(it) } // Vorherige Animation beenden
+
+        progressBarPanel.progress = startProgress.toInt() // Umwandlung zu Int, um die ProgressBar zu setzen
+        progressBarPanel.max = 100
+
+        progressTaskRunnable = object : Runnable {
+            var progress: Double = startProgress // Fortschritt als Double
+            var progressRate: Double = 100.0 / calculateTimeForPanel(panelList[indexPanel % panelList.size]) // Berechne die Fortschrittsrate als Double
+
+            override fun run() {
+                Log.d("PanelSwitch", "Fortschritt: $progress")
+
+                if (!isPanelSwitchingActive || isPaused) {
+                    Log.d("PanelSwitch", "Animation gestoppt - Fertig oder pausiert")
+                    return
+                }
+
+                // Fortschritt erhöhen
+                progress += (100.0 / duration) * 50
+                progressBarPanel.progress = progress.toInt()
+
+                if (progress >= 100) {
+                    Log.d("PanelSwitch", "Fortschritt erreicht 100, nächstes Panel laden...")
+                    loadNextPanel()  // Stelle sicher, dass diese Funktion existiert und das Panel wechselt
+                    return
+                }
+
+                handler.postDelayed(this, 50) // Alle 50ms erneut ausführen
+            }
+
+        }
+
+        handler.post(progressTaskRunnable!!) // Starte das Runnable
+    }
+
+    private fun loadNextPanel() {
+        indexPanel = (indexPanel + 1) % panelList.size  // Nächstes Panel setzen
+        displayPanel(panelList[indexPanel])  // Panel aktualisieren
+        startProgressBarAnimation(calculateTimeForPanel(panelList[indexPanel]))  // Fortschrittsbalken neu starten
+    }
+
+
+
+    private fun resumeProgressBarAnimation() {
+        Log.d("PanelSwitch", "Animation fortsetzen") // Log beim Fortsetzen
+        if (!isPaused || !isPanelSwitchingActive) {
+            Log.d("PanelSwitch", "Fortsetzung abgebrochen - Pausiert oder Inaktiv") // Log, wenn nicht fortgesetzt wird
+            return
+        }
+        isPaused = false // Setze das Pausen-Flag zurück
+
+        // Fortsetzen der Animation mit Restzeit und gespeichertem Fortschritt
+        startProgressBarAnimation(remainingTime, pausedProgress) // Fortsetzen mit Restzeit
+    }
 
     fun loadAppOpenAd(context: Context) {
         val adRequest = AdRequest.Builder().build()
@@ -1222,4 +1299,7 @@ if(!isZoomed) {
         builder.setCancelable(false) // Dialog kann nicht durch Tippen außerhalb geschlossen werden
         builder.show()
     }
+
+
+
 }
