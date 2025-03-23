@@ -130,9 +130,15 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var pausedProgress = 0.0 // Speichert den aktuellen Fortschritt
     private var isPaused = false // Status-Flag
     private var remainingTime = 0L // Speichert verbleibende Zeit
+    private var isFullPageView = false
+    private val fullPageList = ArrayList<Bitmap>() // Speichert vollständige Seiten
 
     private val handler = Handler(Looper.getMainLooper())
     private var progressTaskRunnable: Runnable? = null
+
+    private enum class ZoomState { ZOOMED_IN, FULL_PAGE, DEFAULT }
+    private var currentZoomState = ZoomState.DEFAULT
+
 
     private fun displayImage(uri: Uri) {
         Log.d("MainActivity", "Bild ausgewählt: $uri")
@@ -275,12 +281,28 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                // Bei DoubleTap zoomt das Bild zurück auf die Standardgröße
-                scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
-                imageView.scaleX = scaleFactor
-                imageView.scaleY = scaleFactor
+                currentZoomState = when (currentZoomState) {
+                    ZoomState.DEFAULT -> {
+                        // Zoom auf 2.0f
+                        imageView.scaleX = 2.0f
+                        imageView.scaleY = 2.0f
+                        ZoomState.ZOOMED_IN
+                    }
+                    ZoomState.ZOOMED_IN -> {
+                        // Wechsel zur FullPage-Ansicht
+                        switchToFullPageView()
+                        ZoomState.FULL_PAGE
+                    }
+                    ZoomState.FULL_PAGE -> {
+                        // Zurück auf 1.0f
+                        imageView.scaleX = 1.0f
+                        imageView.scaleY = 1.0f
+                        ZoomState.DEFAULT
+                    }
+                }
                 return true
             }
+
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
@@ -353,22 +375,28 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
             }
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                // Aktualisiere das Ziel, ohne die Skalierung sofort anzupassen
                 targetScaleFactor *= detector.scaleFactor
-                targetScaleFactor = Math.max(1.0f, Math.min(targetScaleFactor, 5.0f))
+                targetScaleFactor = Math.max(0.5f, Math.min(targetScaleFactor, 3.0f))
 
                 // Entferne eventuell anstehende Zoom-Updates
                 pendingZoomRunnable?.let { zoomHandler.removeCallbacks(it) }
 
-                // Setze das verzögerte Zoom-Update
                 pendingZoomRunnable = Runnable {
                     imageView.scaleX = targetScaleFactor
                     imageView.scaleY = targetScaleFactor
+
+                    // Wechsel zur Ganzseitenansicht, wenn der Zoom unter 0.8 fällt
+                    if (targetScaleFactor < 0.8f) {
+                        switchToFullPageView()
+                    }
                 }
-                zoomHandler.postDelayed(pendingZoomRunnable!!, 50) // Aktualisierung alle 50ms
+                zoomHandler.postDelayed(pendingZoomRunnable!!, 50)
 
                 return true
             }
+
+
+
         })
 
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
@@ -555,9 +583,12 @@ if(!isZoomed) {
 
         val deepPanel = DeepPanel()
 
+        fullPageList.clear()
+
         if (pages.isNotEmpty()) {
-            for (page in pages) {
-                Log.d("Page", "Seite: ${page.name}")
+            pages.forEachIndexed { index, page ->
+                Log.d("PageTracker", "Verarbeite Seite: Datei = ${page.name}")
+
                 // Beispiel: Bilddaten extrahieren
                 val inputStream = contentResolver.openInputStream(page.uri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
@@ -581,14 +612,15 @@ if(!isZoomed) {
                 sortedPanels.forEach { panel ->
                     Log.d(
                         "DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
-                |Right: ${panel.right}, Bottom: ${panel.bottom}
-                |Width: ${panel.width}, Height: ${panel.height}
-            """.trimMargin()
-                    )
-                    panelList.add(
-                        Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
-                    )
+                        |Right: ${panel.right}, Bottom: ${panel.bottom}
+                        |Width: ${panel.width}, Height: ${panel.height}
+                        """.trimMargin()
+                        )
+                    panelList.add(Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height))
+
+                    fullPageList.add(bitmap)
                 }
+
             }
         } else {
             Log.d("Page", "Keine Bilddateien in diesem Ordner gefunden.")
@@ -1150,6 +1182,23 @@ if(!isZoomed) {
 
         // Fortsetzen der Animation mit Restzeit und gespeichertem Fortschritt
         startProgressBarAnimation(remainingTime, pausedProgress) // Fortsetzen mit Restzeit
+    }
+
+    private fun switchToFullPageView() {
+        val pageIndex = indexPanel // Nutzt den aktuellen Panel-Index als Seiten-Index
+
+        if (pageIndex in fullPageList.indices) {
+            binding.imageView2.setImageBitmap(fullPageList[pageIndex]) // Ganze Seite anzeigen
+            binding.imageView2.scaleX = 1.0f
+            binding.imageView2.scaleY = 1.0f
+        }
+    }
+
+
+    private fun switchToPanelView() {
+        isFullPageView = false
+        displayPanel(panelList[indexPanel]) // Zur Panel-Ansicht zurückkehren
+        Log.d("Zoom", "Zur Panel-Ansicht wechseln")
     }
 
     fun loadAppOpenAd(context: Context) {
