@@ -50,6 +50,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.GestureDetectorCompat
+import androidx.core.widget.NestedScrollView
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.LifecycleObserver
 import androidx.navigation.findNavController
@@ -138,6 +139,10 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
     private enum class ZoomState { ZOOMED_IN, FULL_PAGE, DEFAULT }
     private var currentZoomState = ZoomState.DEFAULT
+
+    private lateinit var nestedScrollView: NestedScrollView
+    private lateinit var imageView: ImageView
+    private var isWebtoonMode = false
 
 
     private fun displayImage(uri: Uri) {
@@ -266,14 +271,15 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         //openFolderPicker()
         //Log.d("onviewcreated", "after")
 
-        val imageView: ImageView = binding.imageView2
+        imageView = binding.imageView2
 
 // Initialisiere GestureDetector für DoubleTap und SingleTap
         val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onLongPress(e: MotionEvent) {
                 if(!isZoomed && !isDragging) {
                     if (indexPanel>0) indexPanel--
-                    imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    crossfadePanel(panelList[indexPanel], imageView)
                     textView.visibility = View.GONE
                 }
 
@@ -430,7 +436,8 @@ if(!isZoomed) {
                 if (isLongPress == true && isDragging == false) {
                     // Trigger Long-Press Aktion hier
                     if (indexPanel>0) indexPanel--
-                    imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                    crossfadePanel(panelList[indexPanel % panelList.size], imageView)
                     textView.visibility = View.GONE
                 }
             }, longClickDuration)
@@ -751,9 +758,11 @@ if(!isZoomed) {
                 showJumpToDialog()
                 return true
             }
+            
             else -> super.onOptionsItemSelected(item)
         }
     }
+
 
     private fun saveCurrentPanel() {
         val bitmap = panelList[indexPanel % panelList.size] // Das aktuelle Panel
@@ -981,7 +990,8 @@ if(!isZoomed) {
 
             // Erster Panel-Wechsel und Animation starten
             val currentBitmap = panelList[indexPanel % panelList.size]
-            binding.imageView2.setImageBitmap(currentBitmap)
+            //binding.imageView2.setImageBitmap(currentBitmap)
+            crossfadePanel(currentBitmap, imageView)
 
             // Hier wird die Fortschrittsbalken-Animation aufgerufen
             startProgressBarAnimation(calculateTimeForPanel(currentBitmap))
@@ -1043,7 +1053,8 @@ if(!isZoomed) {
         binding.imageView2.translationX = 0f
         binding.imageView2.translationY = 0f
         indexPanel++
-        binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        //binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        crossfadePanel(panelList[indexPanel % panelList.size], imageView)
         textView.visibility = View.GONE
     }
 
@@ -1059,7 +1070,8 @@ if(!isZoomed) {
         binding.imageView2.translationX = 0f
         binding.imageView2.translationY = 0f
         indexPanel++
-        binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        //binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
+        crossfadePanel(panelList[indexPanel % panelList.size], imageView)
         textView.visibility = View.GONE
 
         // Falls der automatische Modus aktiv ist, Timer zurücksetzen und neu starten
@@ -1087,7 +1099,8 @@ if(!isZoomed) {
                     // Panel wechseln
                     indexPanel++
                     val nextBitmap = panelList[indexPanel % panelList.size]
-                    binding.imageView2.setImageBitmap(nextBitmap)
+                    //binding.imageView2.setImageBitmap(nextBitmap)
+                    crossfadePanel(nextBitmap, imageView)
 
                     // Nächste Animation starten
                     animateProgressBar()
@@ -1188,7 +1201,8 @@ if(!isZoomed) {
         val pageIndex = indexPanel // Nutzt den aktuellen Panel-Index als Seiten-Index
 
         if (pageIndex in fullPageList.indices) {
-            binding.imageView2.setImageBitmap(fullPageList[pageIndex]) // Ganze Seite anzeigen
+            //binding.imageView2.setImageBitmap(fullPageList[pageIndex]) // Ganze Seite anzeigen
+            crossfadePanel(fullPageList[pageIndex], imageView)
             binding.imageView2.scaleX = 1.0f
             binding.imageView2.scaleY = 1.0f
         }
@@ -1197,7 +1211,7 @@ if(!isZoomed) {
 
     private fun switchToPanelView() {
         isFullPageView = false
-        displayPanel(panelList[indexPanel]) // Zur Panel-Ansicht zurückkehren
+        displayPanel(panelList[indexPanel % panelList.size]) // Zur Panel-Ansicht zurückkehren
         Log.d("Zoom", "Zur Panel-Ansicht wechseln")
     }
 
@@ -1327,21 +1341,25 @@ if(!isZoomed) {
 
     private fun displayPanel(panelBitmap: Bitmap) {
         runOnUiThread {
-            binding.imageView2.setImageBitmap(panelBitmap)
+            //binding.imageView2.setImageBitmap(panelBitmap)
+            crossfadePanel(panelBitmap, imageView)
         }
     }
 
     private fun showHintDialog() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Controls")
-        val instructionText = "Tap: Move to the next panel.\n" +
-                "Long Press: Go back to the previous panel.\n" +
-                "Double Tap: Zoom in or out on the current panel.\n" +
-                "Drag: Pan around a zoomed panel.\n" +
-                "Hide Taskbar: Fling panel upwards/downwards to hide/show the taskbar\n" +
-                "Auto Mode: Enable in the menu to automatically navigate through panels.\n\n" +
-                "Enjoy your reading experience. \uD83C\uDF38\uD83D\uDDE1\uFE0F"
-        builder.setMessage(instructionText)
+        val instructionText = """
+        <b>Tap:</b> Move to the next panel.<br>
+        <b>Long Press:</b> Go back to the previous panel.<br>
+        <b>Double Tap:</b> Zoom in or out on the current panel.<br>
+        <b>Drag:</b> Pan around a zoomed panel.<br>
+        <b>Hide Taskbar:</b> Fling panel upwards/downwards to hide/show the taskbar.<br>
+        <b>Auto Mode:</b> Enable in the menu to automatically navigate through panels.<br>
+        <b>Full Page View:</b> Double Tap twice or pinch out to zoom out of the panel to view the corresponding entire page in one go.<br><br>
+        Enjoy your reading experience. 📚✨
+    """
+        builder.setMessage(Html.fromHtml(instructionText, Html.FROM_HTML_MODE_COMPACT))
         builder.setPositiveButton("Understood") { dialog, _ ->
             dialog.dismiss() // Schließt den Dialog
         }
@@ -1349,6 +1367,21 @@ if(!isZoomed) {
         builder.show()
     }
 
+    fun crossfadePanel(newBitmap: Bitmap, imageView: ImageView) {
+        val fadeOut = ObjectAnimator.ofFloat(imageView, "alpha", 1f, 0f)
+        fadeOut.duration = 150
 
+        val fadeIn = ObjectAnimator.ofFloat(imageView, "alpha", 0f, 1f)
+        fadeIn.duration = 150
+
+        fadeOut.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                imageView.setImageBitmap(newBitmap)
+                fadeIn.start()
+            }
+        })
+
+        fadeOut.start()
+    }
 
 }

@@ -70,8 +70,8 @@
             android:visibility="gone"
             android:max="100"
             android:progress="0"
-            android:progressTint="@color/white"
-            android:progressBackgroundTint="@color/black" />
+            android:progressTint="#FFFFFF"
+            android:progressBackgroundTint="#000000" />
 
     </FrameLayout>
 
