@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -37,19 +38,23 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.Toolbar
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.GestureDetectorCompat
+import androidx.core.view.WindowCompat
 import androidx.core.widget.NestedScrollView
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.LifecycleObserver
@@ -143,6 +148,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private lateinit var nestedScrollView: NestedScrollView
     private lateinit var imageView: ImageView
     private var isWebtoonMode = false
+    private lateinit var toolbar: Toolbar
 
 
     private fun displayImage(uri: Uri) {
@@ -255,6 +261,26 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         textView = findViewById(R.id.text_home)
         textView.visibility = View.VISIBLE
 
+        toolbar = findViewById<Toolbar>(R.id.myToolbar)
+        setSupportActionBar(toolbar)
+
+        val isDarkTheme = resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
+        // Statusleiste
+        insetsController.isAppearanceLightStatusBars = isDarkTheme
+
+        // Navigationsleiste
+        insetsController.isAppearanceLightNavigationBars = isDarkTheme
+
+
+        //window.statusBarColor = ContextCompat.getColor(this, R.color.status_bar_dark)
+
+
+
         // Initialisiere die ProgressBar
         progressBar = findViewById(R.id.progressBar)
 
@@ -353,10 +379,12 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                     isSwiping = true // Swipe erkannt
                     if (velocityY > 0 && !isToolbarVisible) {
                         // Nach unten wischen: Toolbar einblenden
-                        toggleToolbar()
+                        //toggleToolbar()
+                        toggleToolbarAnimated()
                     } else if (velocityY < 0 && isToolbarVisible) {
                         // Nach oben wischen: Toolbar ausblenden
-                        toggleToolbar()
+                        //toggleToolbar()
+                        toggleToolbarAnimated()
                     }
                     // Nach dem Touch-Event Swipe zurücksetzen
                     if (e2.action == MotionEvent.ACTION_UP || e2.action == MotionEvent.ACTION_CANCEL) {
@@ -930,9 +958,11 @@ if(!isZoomed) {
     fun togglePanelSwitching(item: MenuItem) {
         if (isPanelSwitchingActive) {
             stopPanelSwitching()
+            //showToolbar()
             item.title = "Start Automatic Panel Switching" // Titel zurücksetzen
         } else {
             startPanelSwitching()
+            //hideToolbar()
             item.title = "Stop Automatic Panel Switching" // Titel ändern, um zu stoppen
         }
     }
@@ -1293,6 +1323,59 @@ if(!isZoomed) {
         isToolbarVisible = !isToolbarVisible
     }
 
+    private fun toggleToolbarAnimated() {
+        if (isToolbarVisible) {
+            // Ausblenden mit Animation
+            toolbar.animate()
+                .translationY(-toolbar.height.toFloat())
+                .alpha(0f)
+                .setDuration(250)
+                .withEndAction {
+                    toolbar.visibility = View.GONE
+                }
+                .start()
+
+            // Optional auch System UI verstecken
+            window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+        } else {
+            // Sichtbar machen + sanft einblenden
+            toolbar.visibility = View.VISIBLE
+            toolbar.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(250)
+                .start()
+
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+
+        isToolbarVisible = !isToolbarVisible
+    }
+
+    private fun getActionBarView(): View? {
+        val decorView = window.decorView as ViewGroup
+        return decorView.findViewById<View>(resources.getIdentifier("action_bar_container", "id", "android"))
+    }
+
+
+
+
+    private fun hideSystemUI() {
+        window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                )
+    }
+
+    private fun showSystemUI() {
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+    }
+
     private fun toggleReadingDirection() {
         isReadingRightToLeft = !isReadingRightToLeft
         panelList.clear()
@@ -1382,6 +1465,20 @@ if(!isZoomed) {
         })
 
         fadeOut.start()
+    }
+
+    private fun hideToolbar() {
+        supportActionBar?.hide()
+        window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                )
+    }
+
+    private fun showToolbar() {
+        supportActionBar?.show()
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
     }
 
 }
