@@ -14,10 +14,15 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import com.github.pedrovgs.deeppanel.DeepPanel
+import com.github.pedrovgs.deeppanel.R
+import com.google.android.material.appbar.AppBarLayout
 import com.kurai.mangasamurai2.databinding.FragmentHomeBinding
 
 
@@ -62,7 +67,16 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+
     }
+
+
+
+
+
+
+
 
     override fun onDestroyView() {
         super.onDestroyView()

@@ -5,15 +5,16 @@
         <item name="windowActionBar">false</item>
         <!-- Optional: Verhindert, dass der Titel in der oberen Leiste erscheint -->
         <item name="windowNoTitle">true</item>
-        <item name="android:navigationBarColor">?attr/colorSecondary</item>
+        <item name="android:statusBarColor">?attr/colorPrimaryInverse</item>
+        <item name="android:navigationBarColor">?attr/colorSecondaryContainer</item>
         <!-- Restliche Einstellungen deines Themes -->
         <item name="toolbarStyle">@style/CustomToolbar</item>
     </style>
 
     <style name="CustomToolbar" parent="Widget.Material3.Toolbar">
-        <item name="titleTextColor">?attr/colorOnPrimary</item>
-        <item name="navigationIconTint">?attr/colorOnPrimary</item>
-        <item name="subtitleTextColor">?attr/colorOnPrimary</item>
+        <item name="titleTextColor">?attr/colorOnPrimaryContainer</item>
+        <item name="navigationIconTint">?attr/colorOnSecondaryContainer</item>
+        <item name="subtitleTextColor">?attr/colorOnPrimaryContainer</item>
 
         <!-- NEU: für das Overflow-Icon -->
         <item name="android:theme">@style/ToolbarIconsDark</item>
@@ -24,14 +25,14 @@
 
     <!-- Theme für Icons in der Toolbar selbst -->
     <style name="ToolbarIconsDark" parent="ThemeOverlay.Material3.Light">
-        <item name="colorControlNormal">?attr/colorOnPrimary</item> <!-- Drei Punkte -->
-        <item name="android:textColorPrimary">?attr/colorOnPrimary</item>
-        <item name="android:iconTint">?attr/colorOnPrimary</item> <!-- Für Sicherheit -->
+        <item name="colorControlNormal">?attr/colorOnPrimaryContainer</item> <!-- Drei Punkte -->
+        <item name="android:textColorPrimary">?attr/colorOnPrimaryContainer</item>
+        <item name="android:iconTint">?attr/colorOnPrimaryContainer</item> <!-- Für Sicherheit -->
     </style>
 
     <style name="ToolbarOverflowPopup" parent="ThemeOverlay.Material3.DynamicColors.DayNight">
         <!-- Farbe der drei Punkte im Overflow-Menü -->
-        <item name="colorControlNormal">?attr/colorOnPrimary</item>
+        <item name="colorControlNormal">?attr/colorOnPrimaryContainer</item>
     </style>
 
 

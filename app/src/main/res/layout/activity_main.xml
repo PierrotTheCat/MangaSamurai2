@@ -44,7 +44,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:scaleType="matrix"
+        android:scaleType="centerInside"
         android:background="?attr/colorSurface"
         app:layout_constraintTop_toBottomOf="@+id/frameLayout"
         app:srcCompat="@drawable/ic_dashboard_black_24dp" />
@@ -52,11 +52,13 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/frameLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="1.0"
         tools:context=".MainActivity">
 
         <!-- Toolbar oben -->
@@ -64,13 +66,14 @@
             android:id="@+id/myToolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:elevation="4dp"
-            app:popupTheme="@style/ToolbarOverflowPopup"
+            android:background="?attr/colorPrimaryContainer"
+            android:elevation="8dp"
+            android:fitsSystemWindows="true"
             android:theme="@style/ToolbarIconsDark"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintTop_toTopOf="parent"
+            app:popupTheme="@style/ToolbarOverflowPopup" />
 
         <!-- Fortschrittsbalken unter der Toolbar -->
         <ProgressBar
@@ -78,14 +81,15 @@
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="0dp"
             android:layout_height="4dp"
-            android:max="100"
+            android:max="1000"
             android:progress="0"
-            android:progressBackgroundTint="#000000"
-            android:progressTint="#FFFFFF"
+            android:progressBackgroundTint="?attr/colorOnSecondary"
+            android:progressTint="?attr/colorSecondary"
+            android:secondaryProgressTint="?attr/colorPrimaryContainer"
             android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/myToolbar"
+            app:layout_constraintEnd_toEndOf="parent"
             tools:visibility="gone" />
 
         <!-- Spinner zentriert -->

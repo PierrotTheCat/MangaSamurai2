@@ -21,6 +21,7 @@ import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -39,6 +40,9 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.ImageView
@@ -51,7 +55,9 @@ import androidx.appcompat.widget.Toolbar
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContentProviderCompat.requireContext
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.net.toUri
 import androidx.core.view.GestureDetectorCompat
 import androidx.core.view.WindowCompat
@@ -70,7 +76,9 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.color.MaterialColors
 import com.kurai.mangasamurai2.databinding.ActivityMainBinding
+import com.kurai.mangasamurai2.ui.home.HomeFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Runnable
@@ -83,6 +91,7 @@ import java.util.Timer
 import java.util.TimerTask
 import android.os.Bundle as nBundle
 import java.util.zip.ZipInputStream
+import androidx.core.graphics.toColorInt
 
 
 class MainActivity : AppCompatActivity(), LifecycleObserver {
@@ -146,9 +155,10 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var currentZoomState = ZoomState.DEFAULT
 
     private lateinit var nestedScrollView: NestedScrollView
-    private lateinit var imageView: ImageView
     private var isWebtoonMode = false
     private lateinit var toolbar: Toolbar
+    private var currentProgressAnimator: ObjectAnimator? = null
+
 
 
     private fun displayImage(uri: Uri) {
@@ -200,6 +210,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                                 showedHint = true
                                 showHintDialog()
                             }
+
                             //progressBar.visibility = View.GONE
                             /*val instructionText = "Tap to start. Controls: <br><br>" +
                                     "<b>Tap</b>: Move to the next panel.<br>" +
@@ -262,7 +273,29 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         textView.visibility = View.VISIBLE
 
         toolbar = findViewById<Toolbar>(R.id.myToolbar)
+        /*val color = MaterialColors.getColor(toolbar, com.google.android.material.R.attr.colorPrimaryContainer,
+            "#C0C0C0".toColorInt())
+        val translucentColor = ColorUtils.setAlphaComponent(color, (0.65f * 255).toInt()) // 128 = 50%
+        toolbar.setBackgroundColor(translucentColor)*/
+
+        val baseColor = MaterialColors.getColor(toolbar, com.google.android.material.R.attr.colorPrimaryInverse, Color.DKGRAY)
+
+        // Transparente Varianten erzeugen
+        val startColor = ColorUtils.setAlphaComponent(baseColor, (1.0f * 255).toInt())  // 65% Deckkraft
+        val endColor = ColorUtils.setAlphaComponent(baseColor, 0)  // Voll transparent
+
+        // GradientDrawable erzeugen
+        val gradientDrawable = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(startColor, endColor)
+        )
+
+        toolbar.background = gradientDrawable
+
+
         setSupportActionBar(toolbar)
+
+        binding.imageView2.bringToFront()
 
         val isDarkTheme = resources.configuration.uiMode and
                 Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
@@ -271,10 +304,10 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
 
         // Statusleiste
-        insetsController.isAppearanceLightStatusBars = isDarkTheme
+        insetsController.isAppearanceLightStatusBars = !isDarkTheme
 
         // Navigationsleiste
-        insetsController.isAppearanceLightNavigationBars = isDarkTheme
+        insetsController.isAppearanceLightNavigationBars = !isDarkTheme
 
 
         //window.statusBarColor = ContextCompat.getColor(this, R.color.status_bar_dark)
@@ -295,9 +328,9 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
         //Log.d("onviewcreated", "before")
         //openFolderPicker()
-        //Log.d("onviewcreated", "after")
+        //Log.d("onviewcreated", "after")                  
 
-        imageView = binding.imageView2
+
 
 // Initialisiere GestureDetector für DoubleTap und SingleTap
         val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -305,7 +338,9 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 if(!isZoomed && !isDragging) {
                     if (indexPanel>0) indexPanel--
                     //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                    crossfadePanel(panelList[indexPanel], imageView)
+                    Handler(Looper.getMainLooper()).postDelayed({
+                    crossfadePanel(panelList[indexPanel], binding.imageView2)
+                    }, 300)
                     textView.visibility = View.GONE
                 }
 
@@ -316,8 +351,8 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 currentZoomState = when (currentZoomState) {
                     ZoomState.DEFAULT -> {
                         // Zoom auf 2.0f
-                        imageView.scaleX = 2.0f
-                        imageView.scaleY = 2.0f
+                        binding.imageView2.scaleX = 2.0f
+                        binding.imageView2.scaleY = 2.0f
                         ZoomState.ZOOMED_IN
                     }
                     ZoomState.ZOOMED_IN -> {
@@ -327,8 +362,8 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                     }
                     ZoomState.FULL_PAGE -> {
                         // Zurück auf 1.0f
-                        imageView.scaleX = 1.0f
-                        imageView.scaleY = 1.0f
+                        binding.imageView2.scaleX = 1.0f
+                        binding.imageView2.scaleY = 1.0f
                         ZoomState.DEFAULT
                     }
                 }
@@ -416,8 +451,8 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 pendingZoomRunnable?.let { zoomHandler.removeCallbacks(it) }
 
                 pendingZoomRunnable = Runnable {
-                    imageView.scaleX = targetScaleFactor
-                    imageView.scaleY = targetScaleFactor
+                    binding.imageView2.scaleX = targetScaleFactor
+                    binding.imageView2.scaleY = targetScaleFactor
 
                     // Wechsel zur Ganzseitenansicht, wenn der Zoom unter 0.8 fällt
                     if (targetScaleFactor < 0.8f) {
@@ -439,7 +474,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
 
         // Setze den OnTouchListener für das ImageView
-        imageView.setOnTouchListener { view, event ->
+        binding.imageView2.setOnTouchListener { view, event ->
             // Wenn Pinch-to-Zoom aktiv ist, verarbeite nur das Zoomen
             gestureDetector.onTouchEvent(event) // Double Tap, Single Tap
             scaleGestureDetector.onTouchEvent(event)
@@ -465,7 +500,9 @@ if(!isZoomed) {
                     // Trigger Long-Press Aktion hier
                     if (indexPanel>0) indexPanel--
                     //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                    crossfadePanel(panelList[indexPanel % panelList.size], imageView)
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        crossfadePanel(panelList[indexPanel], binding.imageView2)
+                    }, 300)
                     textView.visibility = View.GONE
                 }
             }, longClickDuration)
@@ -479,7 +516,7 @@ if(!isZoomed) {
 
                 if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
                     isDragging = true // Dragging erkannt
-                    pausePanelSwitchForDrag() // ❄ Pause aktivieren
+
                 }
 
                 if (isDragging) {
@@ -611,56 +648,74 @@ if(!isZoomed) {
     }
 
     fun processPages(folder: DocumentFile) {
-        val imageExtensions = listOf("jpg", "jpeg", "png", "webp") // Unterstützte Bildformate
+        var currentMessage = "" // ganz oben in deiner Methode oder als Feld in der Klasse definieren
+
+        val imageExtensions = listOf("jpg", "jpeg", "png", "webp")
         val pages = folder.listFiles()
-            .filter { it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions } // Filter auf Bilddateien
-            .sortedBy { it.name } // Nach Namen sortieren
+            .filter { it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions }
+            .sortedBy { it.name }
 
         val deepPanel = DeepPanel()
-
         fullPageList.clear()
+        panelList.clear() // auch Panels leeren, falls nötig
 
         if (pages.isNotEmpty()) {
+            val katanaMessages = listOf(
+                "Sharpening katana…",
+                "Slicing pages…",
+                "Final slash…",
+                "Cleaning the blade…",
+                "Stacking cut panels…"
+            )
+
+            val messageStep = if (pages.size < katanaMessages.size) 1 else pages.size / katanaMessages.size
+
             pages.forEachIndexed { index, page ->
+                // 🪶 Statusmeldung abhängig vom Fortschritt
+                val messageIndex = index / messageStep
+                if (messageIndex < katanaMessages.size) {
+                    val newMessage = katanaMessages[messageIndex]
+                    if (newMessage != currentMessage) {
+                        currentMessage = newMessage
+                        runOnUiThread {
+                            textView.apply {
+                                alpha = 0f
+                                text = newMessage
+                                animate().alpha(1f).setDuration(500).start()
+                                visibility = View.VISIBLE
+                            }
+                        }
+                    }
+                }
+
                 Log.d("PageTracker", "Verarbeite Seite: Datei = ${page.name}")
 
-                // Beispiel: Bilddaten extrahieren
                 val inputStream = contentResolver.openInputStream(page.uri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
 
-                // Hier kannst du die Bitmap verarbeiten, z. B. in eine Liste hinzufügen
                 val result = deepPanel.extractPanelsInfo(bitmap)
                 val temp = result.panels.panelsInfo
 
-                /*// Dynamische Sortierung basierend auf der Leserichtung
-                val sortedPanels = if (isReadingRightToLeft) {
-                    temp.sortedBy { it.top }.sortedByDescending { it.right } // Rechts nach links
-                } else {
-                    temp.sortedBy { it.top }.sortedBy { it.left } // Links nach rechts
-                }*/
                 val sortedPanels = temp.sortedWith(compareBy<Panel> { it.top }
                     .thenBy { if (isReadingRightToLeft) -it.right else it.left })
 
-
-                // Panels der Liste hinzufügen
                 sortedPanels.forEach { panel ->
-                    Log.d(
-                        "DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
-                        |Right: ${panel.right}, Bottom: ${panel.bottom}
-                        |Width: ${panel.width}, Height: ${panel.height}
-                        """.trimMargin()
-                        )
-                    panelList.add(Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height))
+                    Log.d("DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
+                    |Right: ${panel.right}, Bottom: ${panel.bottom}
+                    |Width: ${panel.width}, Height: ${panel.height}
+                    """.trimMargin())
 
+                    val panelBitmap = Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
+                    panelList.add(panelBitmap)
                     fullPageList.add(bitmap)
                 }
-
             }
         } else {
             Log.d("Page", "Keine Bilddateien in diesem Ordner gefunden.")
         }
     }
+
 
     private fun listFilesInFolder(folderUri: Uri) {
         Log.d("listfilesinfolder", "true")
@@ -758,37 +813,46 @@ if(!isZoomed) {
                 pageList.clear()
                 binding.imageView2.visibility = View.INVISIBLE
                 openFolderPicker()
+                //toggleToolbarAnimated()
                 true
             }
             R.id.action_option2 -> {
                 // Aktion für Option 2 - Zeige den Farbwähldialog an
                 showColorPickerDialog()
+                //toggleToolbarAnimated()
                 true
             }
             R.id.menu_save_panel -> {
                 saveCurrentPanel()
+                //toggleToolbarAnimated()
                 return true
             }
             R.id.action_set_multiplier -> {
                 showMultiplierDialog()
+                //toggleToolbarAnimated()
                 true
             }
             R.id.action_auto_switch -> {
                 // Aktion für "Automatischer Panel-Wechsel"
                 togglePanelSwitching(item)
+                //toggleToolbarAnimated()
                 return true
             }
             R.id.action_toggle_reading_direction -> {
                 toggleReadingDirection()
+                //toggleToolbarAnimated()
                 true
             }
             R.id.action_jump_to -> {
                 showJumpToDialog()
+                //toggleToolbarAnimated()
                 return true
             }
             
             else -> super.onOptionsItemSelected(item)
         }
+
+
     }
 
 
@@ -1021,7 +1085,7 @@ if(!isZoomed) {
             // Erster Panel-Wechsel und Animation starten
             val currentBitmap = panelList[indexPanel % panelList.size]
             //binding.imageView2.setImageBitmap(currentBitmap)
-            crossfadePanel(currentBitmap, imageView)
+            crossfadePanel(currentBitmap, binding.imageView2)
 
             // Hier wird die Fortschrittsbalken-Animation aufgerufen
             startProgressBarAnimation(calculateTimeForPanel(currentBitmap))
@@ -1039,42 +1103,34 @@ if(!isZoomed) {
         progressTaskRunnable?.let { handler.removeCallbacks(it) } // Vorherige Task abbrechen
 
         progressBarPanel.progress = 0
-        progressBarPanel.max = 100
+        progressBarPanel.max = 1000
         progressBarPanel.visibility = View.VISIBLE
 
-        startTime = System.currentTimeMillis()
-
-        progressTaskRunnable = object : Runnable {
-            override fun run() {
-                if (!isPanelSwitchingActive) {
-                    progressBarPanel.visibility = View.GONE
-                    return // ❌ Stoppen, falls deaktiviert
-                }
-
-                val elapsed = System.currentTimeMillis() - startTime
-                val progress = (elapsed * 100 / duration).toInt()
-
-                if (progress >= 100) {
-                    progressBarPanel.progress = 100
-                    progressBarPanel.visibility = View.GONE
-
-                    // 👉 Panel wechseln
-                    showNextPanel()
-
-                    // 🚀 NEU: Prüfen, ob es noch aktiv ist!
+        // ✨ Kontinuierliche, sanfte Animation
+        val animator = ObjectAnimator.ofInt(progressBarPanel, "progress", 0, 1000).apply {
+            this.duration = duration
+            interpolator = LinearInterpolator()
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
                     if (isPanelSwitchingActive) {
-                        startProgressBarAnimation(duration) // Nur dann neu starten!
+                        progressBarPanel.visibility = View.GONE
+                        showNextPanel()
+                        startProgressBarAnimation(duration) // nur wenn aktiv
                     }
-                    return
                 }
 
-                progressBarPanel.progress = progress
-                handler.postDelayed(this, 50)
-            }
+                override fun onAnimationCancel(animation: Animator) {
+                    progressBarPanel.visibility = View.GONE
+                }
+            })
         }
 
-        handler.post(progressTaskRunnable!!)
+        // 🔥 Wichtiger Schritt: Merke dir den Animator, um ihn ggf. zu beenden
+        currentProgressAnimator?.cancel()
+        currentProgressAnimator = animator
+        animator.start()
     }
+
 
 
     private fun showNextPanel() {
@@ -1084,7 +1140,7 @@ if(!isZoomed) {
         binding.imageView2.translationY = 0f
         indexPanel++
         //binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
-        crossfadePanel(panelList[indexPanel % panelList.size], imageView)
+        crossfadePanel(panelList[indexPanel % panelList.size], binding.imageView2)
         textView.visibility = View.GONE
     }
 
@@ -1101,8 +1157,10 @@ if(!isZoomed) {
         binding.imageView2.translationY = 0f
         indexPanel++
         //binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
-        crossfadePanel(panelList[indexPanel % panelList.size], imageView)
+        crossfadePanel(panelList[indexPanel % panelList.size], binding.imageView2)
         textView.visibility = View.GONE
+
+
 
         // Falls der automatische Modus aktiv ist, Timer zurücksetzen und neu starten
         if (isPanelSwitchingActive) {
@@ -1130,7 +1188,7 @@ if(!isZoomed) {
                     indexPanel++
                     val nextBitmap = panelList[indexPanel % panelList.size]
                     //binding.imageView2.setImageBitmap(nextBitmap)
-                    crossfadePanel(nextBitmap, imageView)
+                    crossfadePanel(nextBitmap, binding.imageView2)
 
                     // Nächste Animation starten
                     animateProgressBar()
@@ -1153,33 +1211,17 @@ if(!isZoomed) {
         }.start()
     }
 
-    private fun pausePanelSwitchForDrag() {
-        Log.d("PanelSwitch", "Pause gestartet") // Log zur Pause
-        progressTaskRunnable?.let { handler.removeCallbacks(it) } // Stoppe die Animation
-        pausedProgress = progressBarPanel.progress.toDouble() // Speichere den aktuellen Fortschritt
-        remainingTime = ((100 - pausedProgress) * calculateTimeForPanel(panelList[indexPanel % panelList.size]) / 100).toLong() // Berechne verbleibende Zeit
-        Log.d("PanelSwitch", "Fortschritt gespeichert: $pausedProgress, verbleibende Zeit: $remainingTime") // Log zur Berechnung
-
-        isPaused = true // Merke, dass eine Pause aktiv ist
-
-        handler.postDelayed({
-            Log.d("PanelSwitch", "3 Sekunden Pause vorbei, fortfahren...")
-            if (isPanelSwitchingActive) { // Falls Panel-Wechsel aktiv ist, fortsetzen
-                resumeProgressBarAnimation()
-            }
-        }, 3000) // 3 Sekunden Verzögerung
-    }
 
     private fun startProgressBarAnimation(duration: Long, startProgress: Double = 0.0) {
         Log.d("PanelSwitch", "Animation starten mit Fortschritt: $startProgress und Dauer: $duration") // Log zum Start der Animation
         progressTaskRunnable?.let { handler.removeCallbacks(it) } // Vorherige Animation beenden
 
         progressBarPanel.progress = startProgress.toInt() // Umwandlung zu Int, um die ProgressBar zu setzen
-        progressBarPanel.max = 100
+        progressBarPanel.max = 1000
 
         progressTaskRunnable = object : Runnable {
             var progress: Double = startProgress // Fortschritt als Double
-            var progressRate: Double = 100.0 / calculateTimeForPanel(panelList[indexPanel % panelList.size]) // Berechne die Fortschrittsrate als Double
+            var progressRate: Double = 1000.0 / calculateTimeForPanel(panelList[indexPanel % panelList.size]) // Berechne die Fortschrittsrate als Double
 
             override fun run() {
                 Log.d("PanelSwitch", "Fortschritt: $progress")
@@ -1190,10 +1232,10 @@ if(!isZoomed) {
                 }
 
                 // Fortschritt erhöhen
-                progress += (100.0 / duration) * 50
+                progress += (1000.0 / duration) * 50
                 progressBarPanel.progress = progress.toInt()
 
-                if (progress >= 100) {
+                if (progress >= 1000) {
                     Log.d("PanelSwitch", "Fortschritt erreicht 100, nächstes Panel laden...")
                     loadNextPanel()  // Stelle sicher, dass diese Funktion existiert und das Panel wechselt
                     return
@@ -1232,7 +1274,7 @@ if(!isZoomed) {
 
         if (pageIndex in fullPageList.indices) {
             //binding.imageView2.setImageBitmap(fullPageList[pageIndex]) // Ganze Seite anzeigen
-            crossfadePanel(fullPageList[pageIndex], imageView)
+            crossfadePanel(fullPageList[pageIndex], binding.imageView2)
             binding.imageView2.scaleX = 1.0f
             binding.imageView2.scaleY = 1.0f
         }
@@ -1325,7 +1367,8 @@ if(!isZoomed) {
 
     private fun toggleToolbarAnimated() {
         if (isToolbarVisible) {
-            // Ausblenden mit Animation
+
+            // Ausblenden
             toolbar.animate()
                 .translationY(-toolbar.height.toFloat())
                 .alpha(0f)
@@ -1335,22 +1378,26 @@ if(!isZoomed) {
                 }
                 .start()
 
-            // Optional auch System UI verstecken
-            window.decorView.systemUiVisibility = (
-                    View.SYSTEM_UI_FLAG_FULLSCREEN or
-                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    )
+            enterImmersiveMode()
+
+
+
         } else {
-            // Sichtbar machen + sanft einblenden
+
+            // Sichtbar machen
             toolbar.visibility = View.VISIBLE
             toolbar.animate()
                 .translationY(0f)
                 .alpha(1f)
                 .setDuration(250)
+                .withEndAction {
+                    // 🔁 Toolbar wieder verbinden und Menü neu laden
+                    setSupportActionBar(toolbar)
+                    invalidateOptionsMenu()
+                }
                 .start()
 
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            exitImmersiveMode()
         }
 
         isToolbarVisible = !isToolbarVisible
@@ -1425,7 +1472,7 @@ if(!isZoomed) {
     private fun displayPanel(panelBitmap: Bitmap) {
         runOnUiThread {
             //binding.imageView2.setImageBitmap(panelBitmap)
-            crossfadePanel(panelBitmap, imageView)
+            crossfadePanel(panelBitmap, binding.imageView2)
         }
     }
 
@@ -1451,6 +1498,13 @@ if(!isZoomed) {
     }
 
     fun crossfadePanel(newBitmap: Bitmap, imageView: ImageView) {
+        if (imageView.drawable == null) {
+            // Erstes Bild: direkt setzen, ohne Animation
+            imageView.setImageBitmap(newBitmap)
+            imageView.alpha = 1f
+            return
+        }
+
         val fadeOut = ObjectAnimator.ofFloat(imageView, "alpha", 1f, 0f)
         fadeOut.duration = 150
 
@@ -1459,13 +1513,22 @@ if(!isZoomed) {
 
         fadeOut.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
+                Log.d("crossfade", "Fade out beendet, neues Bild gesetzt")
                 imageView.setImageBitmap(newBitmap)
                 fadeIn.start()
             }
         })
 
         fadeOut.start()
+
+        fadeIn.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                Log.d("crossfade", "Fade in abgeschlossen")
+            }
+        })
+
     }
+
 
     private fun hideToolbar() {
         supportActionBar?.hide()
@@ -1480,5 +1543,38 @@ if(!isZoomed) {
         supportActionBar?.show()
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
     }
+
+    fun enterImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.let {
+                it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+        }
+    }
+
+    fun exitImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+    fun animateProgressBarTo(progressBar: ProgressBar, targetProgress: Int) {
+        val animation = ObjectAnimator.ofInt(progressBar, "progress", progressBar.progress, targetProgress)
+        animation.duration = 500  // Dauer der Animation in ms
+        animation.interpolator = DecelerateInterpolator()
+        animation.start()
+    }
+
 
 }
