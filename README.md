@@ -7,15 +7,16 @@ My app aditionally features an automatic reading mode that displays the next pan
 
 <h2>Controls and Features</h2>
 <ul>
-  <li>show new graphic novel/chapter: tap on the three dot menu, tap on "choose folder", choose a different folder, wait, tap to show first panel</li>
+  <li>show new graphic novel/chapter: tap on the three dot menu, tap on "choose folder", choose a folder, wait, tap to show first panel</li>
   <li>show next panel: tap on the display
   <li>return to previous panel: long press on panel</li>
   <li>zooming panel: pinching gesture or double tap</li>
   <li>move panel: drag and drop</li>
-  <li>automatic reading mode: start it over the menu to change the panel automatically and dynamically every 6 - 22 seconds depending on the panel shape and size, tap the same menu item to stop, other controls still work during this mode</li>
-  <li>dynamic color: theme adapts to your Material You color scheme</li>
+  <li>automatic reading mode: press "start automatic switching mode" in the menu to change the panel automatically and dynamically every 6 - 22 seconds depending on the panel shape and size. Tap the panel to cancel the mode. </li>
+  <li>dynamic color: theme adapts to your Material You color scheme and light/dark mode</li>
   <li>color filter overlay: open the menu, tap on color filter, adjust the argb values, save and tap on the panel to apply the color overlay</li>
-  <li>fullscreen view: fling the panel upwards quickly to hide the menubar, fling downwards to make it reappear</li>
+  <li>fullscreen view: fling the panel upwards quickly to hide the toolbar and navbar, fling downwards to make them reappear</li>
+  <li>choose "jump to.." in the menu to jump to  a specific page</li>
 </ul>
 
 <h2>Detailed Instructions</h2>
