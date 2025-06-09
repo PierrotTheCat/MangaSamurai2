@@ -92,6 +92,11 @@ import java.util.TimerTask
 import android.os.Bundle as nBundle
 import java.util.zip.ZipInputStream
 import androidx.core.graphics.toColorInt
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 class MainActivity : AppCompatActivity(), LifecycleObserver {
@@ -189,7 +194,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 CoroutineScope(Dispatchers.Default).launch {
                     // Hier den Schneidevorgang durchführen
                     selectedFolderUri = uri
-                    panelList.clear()
+                    //panelList.clear()
                     //listFilesInFolder(selectedFolderUri!!)
                     if (documentFile != null && documentFile!!.isDirectory) {
                         processChapters(documentFile!!)
@@ -336,11 +341,12 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onLongPress(e: MotionEvent) {
                 if(!isZoomed && !isDragging) {
-                    if (indexPanel>0) indexPanel--
+                    /*if (indexPanel>0) indexPanel--
                     //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                     Handler(Looper.getMainLooper()).postDelayed({
                     crossfadePanel(panelList[indexPanel], binding.imageView2)
-                    }, 300)
+                    }, 300)*/
+                    onManualPanelBack()
                     textView.visibility = View.GONE
                 }
 
@@ -657,15 +663,15 @@ if(!isZoomed) {
 
         val deepPanel = DeepPanel()
         fullPageList.clear()
-        panelList.clear() // auch Panels leeren, falls nötig
+        //panelList.clear() // auch Panels leeren, falls nötig
 
         if (pages.isNotEmpty()) {
             val katanaMessages = listOf(
-                "Sharpening katana…",
-                "Slicing pages…",
-                "Final slash…",
-                "Cleaning the blade…",
-                "Stacking cut panels…"
+                "\uD83C\uDF38",
+                "\uD83C\uDF38\uD83C\uDF38",
+                "\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38",
+                "\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38",
+                "\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38"
             )
 
             val messageStep = if (pages.size < katanaMessages.size) 1 else pages.size / katanaMessages.size
@@ -811,6 +817,7 @@ if(!isZoomed) {
                 // Aktion für Option 1
                 progressBar.visibility = View.VISIBLE
                 pageList.clear()
+                panelList.clear()
                 binding.imageView2.visibility = View.INVISIBLE
                 openFolderPicker()
                 //toggleToolbarAnimated()
@@ -826,6 +833,14 @@ if(!isZoomed) {
                 saveCurrentPanel()
                 //toggleToolbarAnimated()
                 return true
+            }
+            R.id.action_save_panels -> {
+                saveAllPanels()
+                true
+            }
+            R.id.action_save_large_panels -> {
+                saveLargePanelsOnly()
+                true
             }
             R.id.action_set_multiplier -> {
                 showMultiplierDialog()
@@ -1021,17 +1036,17 @@ if(!isZoomed) {
 
     fun togglePanelSwitching(item: MenuItem) {
         if (isPanelSwitchingActive) {
+            item.setTitle("Start Automatic Panel Switching")
             stopPanelSwitching()
             //showToolbar()
-            item.title = "Start Automatic Panel Switching" // Titel zurücksetzen
         } else {
+            item.setTitle("Stop Automatic Panel Switching")
             startPanelSwitching()
             //hideToolbar()
-            item.title = "Stop Automatic Panel Switching" // Titel ändern, um zu stoppen
         }
     }
 
-    fun calculateTimeForPanel(panelBitmap: Bitmap): Long {
+    /*fun calculateTimeForPanel(panelBitmap: Bitmap): Long {
         val width = panelBitmap.width
         val height = panelBitmap.height
         val area = width * height
@@ -1073,9 +1088,48 @@ if(!isZoomed) {
 
 
         return (baseTime * proportionalAdjustment * timerMultiplier).toLong()
+    }*/
+
+    fun calculateTimeForPanel(panelBitmap: Bitmap): Long {
+        Log.d("SmoothDelay", "Funktion wurde aufgerufen")
+
+        val width = panelBitmap.width
+        val height = panelBitmap.height
+        val area = width.toDouble() * height.toDouble()
+
+        // Grundparameter
+        val minBaseTime = 3000L     // 4 Sekunden Mindestanzeige
+        val maxExtraTime = 10000L   // Bis zu 16 Sekunden Zusatzzeit möglich
+
+        // Wurzel der Fläche, normiert auf typische Manga-Panelgrößen
+        val normalizedArea = (area / 1_000_000.0).coerceIn(0.1, 3.0) // typisches Manga-Panel: 0.1M–3M Pixel
+
+        // Zeit basierend auf Wurzel, damit große Panels weniger extrem eskalieren
+        val areaFactor = Math.sqrt(normalizedArea)
+
+        val dynamicTime = (areaFactor * maxExtraTime).toLong()
+
+        // Seitenverhältnis (wie bei dir) als Bonusanpassung
+        val aspectRatio = height / width.toDouble()
+        val aspectMultiplier = when {
+            aspectRatio > 2.5 -> 1.3
+            aspectRatio > 2.0 -> 1.2
+            aspectRatio > 1.5 -> 1.1
+            aspectRatio < 0.5 -> 1.2
+            aspectRatio < 0.8 -> 1.1
+            else -> 1.0
+        }
+
+        val finalTime = ((minBaseTime + dynamicTime) * aspectMultiplier * timerMultiplier).toLong()
+
+        Log.d("SmoothDelay", "Area: $area, Normalized: $normalizedArea, BaseTime: ${minBaseTime + dynamicTime}, Final: $finalTime ms")
+
+        return finalTime
     }
 
+
     fun startPanelSwitching() {
+        Log.d("startPanelSwitching", "Next")
         if (!isPanelSwitchingActive) {
             isPanelSwitchingActive = true
 
@@ -1095,6 +1149,8 @@ if(!isZoomed) {
     fun stopPanelSwitching() {
         isPanelSwitchingActive = false
         progressBarPanel.progress = 0 // Fortschritt zurücksetzen
+        panelSwitchTimer?.cancel()
+        panelSwitchTimer = null
         // ProgressBar ausblenden
         fadeOutProgressBar()
     }
@@ -1114,10 +1170,18 @@ if(!isZoomed) {
                 override fun onAnimationEnd(animation: Animator) {
                     if (isPanelSwitchingActive) {
                         progressBarPanel.visibility = View.GONE
+
                         showNextPanel()
-                        startProgressBarAnimation(duration) // nur wenn aktiv
+
+                        val nextBitmap = panelList[indexPanel % panelList.size]
+                        val nextDuration = calculateTimeForPanel(nextBitmap) // 🧠 Neue Dauer berechnen!
+                        val next = nextDuration/1000.00
+                        Log.d("SmoothDelay", "Next Duration: $next")
+
+                        startProgressBarAnimation(nextDuration) // Jetzt wird's dynamisch 🎉
                     }
                 }
+
 
                 override fun onAnimationCancel(animation: Animator) {
                     progressBarPanel.visibility = View.GONE
@@ -1134,6 +1198,7 @@ if(!isZoomed) {
 
 
     private fun showNextPanel() {
+        Log.d("showNextPanel", "Next")
         binding.imageView2.scaleX = 1f
         binding.imageView2.scaleY = 1f
         binding.imageView2.translationX = 0f
@@ -1148,29 +1213,33 @@ if(!isZoomed) {
 
 
     fun onManualPanelSwitch() {
-        // Stoppe den aktuellen Timer und die Fortschrittsanimation
-        stopPanelSwitching()
+        Log.d("onManualPanelSwitch", "Next")
 
+        // Panelposition zurücksetzen
         binding.imageView2.scaleX = 1f
         binding.imageView2.scaleY = 1f
         binding.imageView2.translationX = 0f
         binding.imageView2.translationY = 0f
+
+        // Zum nächsten Panel wechseln
         indexPanel++
-        //binding.imageView2.setImageBitmap(panelList[indexPanel % panelList.size])
         crossfadePanel(panelList[indexPanel % panelList.size], binding.imageView2)
         textView.visibility = View.GONE
 
-
-
-        // Falls der automatische Modus aktiv ist, Timer zurücksetzen und neu starten
+        // Falls automatischer Modus aktiv ist:
+        // -> Korrigiere indexPanel, damit der automatische Modus nicht das Panel doppelt überspringt
+        // -> Starte Timer und Fortschrittsanzeige neu
         if (isPanelSwitchingActive) {
-            startPanelSwitching()
+            indexPanel--
+            restartPanelSwitching()
         }
     }
 
 
 
+
     fun animateProgressBar() {
+        Log.d("animateProgressBar", "Next")
         // Aktuelles Panel bestimmen
         val currentBitmap = panelList[indexPanel % panelList.size]
 
@@ -1213,40 +1282,40 @@ if(!isZoomed) {
 
 
     private fun startProgressBarAnimation(duration: Long, startProgress: Double = 0.0) {
-        Log.d("PanelSwitch", "Animation starten mit Fortschritt: $startProgress und Dauer: $duration") // Log zum Start der Animation
-        progressTaskRunnable?.let { handler.removeCallbacks(it) } // Vorherige Animation beenden
+        Log.d("startProgressBarAnimation", "Next")
+        progressTaskRunnable?.let { handler.removeCallbacks(it) }
 
-        progressBarPanel.progress = startProgress.toInt() // Umwandlung zu Int, um die ProgressBar zu setzen
+        progressBarPanel.progress = 0
         progressBarPanel.max = 1000
+        progressBarPanel.visibility = View.VISIBLE
 
-        progressTaskRunnable = object : Runnable {
-            var progress: Double = startProgress // Fortschritt als Double
-            var progressRate: Double = 1000.0 / calculateTimeForPanel(panelList[indexPanel % panelList.size]) // Berechne die Fortschrittsrate als Double
+        val animator = ObjectAnimator.ofInt(progressBarPanel, "progress", 0, 1000).apply {
+            this.duration = duration
+            interpolator = LinearInterpolator()
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (isPanelSwitchingActive) {
+                        indexPanel = (indexPanel + 1) % panelList.size
 
-            override fun run() {
-                Log.d("PanelSwitch", "Fortschritt: $progress")
+                        val nextBitmap = panelList[indexPanel]
+                        crossfadePanel(nextBitmap, binding.imageView2)
 
-                if (!isPanelSwitchingActive || isPaused) {
-                    Log.d("PanelSwitch", "Animation gestoppt - Fertig oder pausiert")
-                    return
+                        val nextDuration = calculateTimeForPanel(nextBitmap) // 🧠 Hier neu berechnen!
+                        Log.d("AutoPlay", "Next panel delay: $nextDuration ms")
+
+                        startProgressBarAnimation(nextDuration)
+                    }
                 }
 
-                // Fortschritt erhöhen
-                progress += (1000.0 / duration) * 50
-                progressBarPanel.progress = progress.toInt()
-
-                if (progress >= 1000) {
-                    Log.d("PanelSwitch", "Fortschritt erreicht 100, nächstes Panel laden...")
-                    loadNextPanel()  // Stelle sicher, dass diese Funktion existiert und das Panel wechselt
-                    return
+                override fun onAnimationCancel(animation: Animator) {
+                    progressBarPanel.visibility = View.GONE
                 }
-
-                handler.postDelayed(this, 50) // Alle 50ms erneut ausführen
-            }
-
+            })
         }
 
-        handler.post(progressTaskRunnable!!) // Starte das Runnable
+        currentProgressAnimator?.cancel()
+        currentProgressAnimator = animator
+        animator.start()
     }
 
     private fun loadNextPanel() {
@@ -1270,6 +1339,7 @@ if(!isZoomed) {
     }
 
     private fun switchToFullPageView() {
+        Log.d("switchToFullPageView", "Next")
         val pageIndex = indexPanel // Nutzt den aktuellen Panel-Index als Seiten-Index
 
         if (pageIndex in fullPageList.indices) {
@@ -1472,6 +1542,7 @@ if(!isZoomed) {
     private fun displayPanel(panelBitmap: Bitmap) {
         runOnUiThread {
             //binding.imageView2.setImageBitmap(panelBitmap)
+            Log.d("displayPanel", "Next")
             crossfadePanel(panelBitmap, binding.imageView2)
         }
     }
@@ -1513,7 +1584,6 @@ if(!isZoomed) {
 
         fadeOut.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                Log.d("crossfade", "Fade out beendet, neues Bild gesetzt")
                 imageView.setImageBitmap(newBitmap)
                 fadeIn.start()
             }
@@ -1574,6 +1644,137 @@ if(!isZoomed) {
         animation.duration = 500  // Dauer der Animation in ms
         animation.interpolator = DecelerateInterpolator()
         animation.start()
+    }
+
+    private fun restartPanelSwitching() {
+        // Nur den Timer und Animator stoppen, aber den Modus beibehalten
+        panelSwitchTimer?.cancel()
+        currentProgressAnimator?.cancel()
+
+        // Aktuelles Panel neu starten
+        startPanelSwitching() // startet Timer und Fortschrittsanimation für das aktuelle Panel neu
+    }
+
+    fun onManualPanelBack() {
+        Log.d("onManualPanelBack", "Previous")
+
+        // Panelposition zurücksetzen
+        binding.imageView2.scaleX = 1f
+        binding.imageView2.scaleY = 1f
+        binding.imageView2.translationX = 0f
+        binding.imageView2.translationY = 0f
+
+        // Vorheriges Panel anzeigen (achte auf negativen Index)
+        if (indexPanel > 0) {
+            indexPanel--
+        }
+
+        crossfadePanel(panelList[indexPanel % panelList.size], binding.imageView2)
+        textView.visibility = View.GONE
+
+        // Automatik-Modus neu starten (aber nicht deaktivieren)
+        if (isPanelSwitchingActive) {
+            indexPanel--
+            restartPanelSwitching()
+        }
+    }
+
+    private fun saveAllPanels() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val timeStamp = System.currentTimeMillis()
+            var successCount = 0
+
+            for ((i, bitmap) in panelList.withIndex()) {
+                val filename = "manga_panel_${timeStamp}_$i.png"
+
+                try {
+                    val outputStream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels")
+                        }
+
+                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        uri?.let { contentResolver.openOutputStream(it) }
+                            ?: throw IOException("Fehler beim Erstellen der Datei")
+                    } else {
+                        val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels")
+                        if (!directory.exists()) directory.mkdirs()
+                        val file = File(directory, filename)
+                        FileOutputStream(file)
+                    }
+
+                    outputStream.use {
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+
+                    successCount++
+
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "$successCount von ${panelList.size} Panels gespeichert 📂",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun saveLargePanelsOnly() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val thresholdArea = 600_000  // Mindestfläche in Pixeln
+            val timeStamp = System.currentTimeMillis()
+            var successCount = 0
+
+            for ((i, bitmap) in panelList.withIndex()) {
+                val area = bitmap.width * bitmap.height
+                if (area < thresholdArea) continue  // Überspringe kleine Panels
+
+                val filename = "manga_panel_${timeStamp}_$i.png"
+
+                try {
+                    val outputStream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels/LargeOnly")
+                        }
+
+                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        uri?.let { contentResolver.openOutputStream(it) }
+                            ?: throw IOException("Fehler beim Erstellen der Datei")
+                    } else {
+                        val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels/LargeOnly")
+                        if (!directory.exists()) directory.mkdirs()
+                        val file = File(directory, filename)
+                        FileOutputStream(file)
+                    }
+
+                    outputStream.use {
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+
+                    successCount++
+
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "$successCount large panels saved 🖼️",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
 
