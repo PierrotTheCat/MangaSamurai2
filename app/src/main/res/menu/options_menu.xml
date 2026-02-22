@@ -12,8 +12,8 @@
         android:id="@+id/menu_save_panel"
         android:title="Save Current Panel" />
     <item
-            android:id="@+id/action_save_panels"
-            android:title="Save All Panels" />
+        android:id="@+id/action_save_panels"
+        android:title="Save All Panels" />
     <item
         android:id="@+id/action_save_large_panels"
         android:title="Save All Large Panels" />

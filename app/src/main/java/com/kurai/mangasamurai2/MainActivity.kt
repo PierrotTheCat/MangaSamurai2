@@ -99,12 +99,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
+
+
 class MainActivity : AppCompatActivity(), LifecycleObserver {
 
 
     private var colorize: Boolean = false
     private lateinit var binding: ActivityMainBinding
-    val i=0
+    val i = 0
     var indexPanel: Int = -1
     var indexPage: Int = 0
     private val pageList = ArrayList<DocumentFile>()
@@ -113,7 +115,7 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private lateinit var progressBar: ProgressBar
     private lateinit var textView: TextView
     private lateinit var adView: AdView
-    var color: Int = Color.argb(120,120,120,120)
+    var color: Int = Color.argb(120, 120, 120, 120)
     private var isZoomed = false // Flag, um zwischen normaler Ansicht und Zoom zu wechseln
     private var matrix = Matrix()
     private var savedMatrix = Matrix()
@@ -139,8 +141,10 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var progressTask: TimerTask? = null
     private var appOpenAd: AppOpenAd? = null
     private var timerMultiplier: Float = 1.0f // Standardwert
+
     // Variable, um die Toolbar-Sichtbarkeit zu speichern
     private var isToolbarVisible = true
+
     // Variable, um Swipe und Drag zu trennen
     private var isSwiping = false
     private var isReadingRightToLeft = true // Standardrichtung von links nach rechts
@@ -157,13 +161,21 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     private var progressTaskRunnable: Runnable? = null
 
     private enum class ZoomState { ZOOMED_IN, FULL_PAGE, DEFAULT }
+
     private var currentZoomState = ZoomState.DEFAULT
 
     private lateinit var nestedScrollView: NestedScrollView
     private var isWebtoonMode = false
     private lateinit var toolbar: Toolbar
     private var currentProgressAnimator: ObjectAnimator? = null
+    private var currentScale = 1f
 
+    private var lastX = 0f
+    private var lastY = 0f
+
+    private val touchSlop by lazy {
+        ViewConfiguration.get(this).scaledTouchSlop
+    }
 
 
     private fun displayImage(uri: Uri) {
@@ -180,27 +192,26 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
     }
 
     private val PICK_FOLDER_REQUEST_CODE = 123
-    private var folderPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        Log.d("folderpickerlauncher", "true")
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data: Intent? = result.data
-            data?.data?.also { uri ->
-                // ProgressBar anzeigen
-                progressBar.visibility = View.VISIBLE
-                documentFile = DocumentFile.fromTreeUri(this, uri)
+    private var folderPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            Log.d("folderpickerlauncher", "true")
+            if (result.resultCode == Activity.RESULT_OK) {
+                val data: Intent? = result.data
+                data?.data?.also { uri ->
+                    // ProgressBar anzeigen
+                    progressBar.visibility = View.VISIBLE
+                    documentFile = DocumentFile.fromTreeUri(this, uri)
 
 
-                // Coroutine starten, um den Schneidevorgang im Hintergrund auszuführen
-                CoroutineScope(Dispatchers.Default).launch {
-                    // Hier den Schneidevorgang durchführen
-                    selectedFolderUri = uri
-                    //panelList.clear()
-                    //listFilesInFolder(selectedFolderUri!!)
-                    if (documentFile != null && documentFile!!.isDirectory) {
-                        processChapters(documentFile!!)
-                    }
-
-
+                    // Coroutine starten, um den Schneidevorgang im Hintergrund auszuführen
+                    CoroutineScope(Dispatchers.Default).launch {
+                        // Hier den Schneidevorgang durchführen
+                        selectedFolderUri = uri
+                        //panelList.clear()
+                        //listFilesInFolder(selectedFolderUri!!)
+                        if (documentFile != null && documentFile!!.isDirectory) {
+                            processChapters(documentFile!!)
+                        }
 
 
                         // ProgressBar auf dem Haupt-UI-Thread ausblenden
@@ -218,52 +229,47 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
                             //progressBar.visibility = View.GONE
                             /*val instructionText = "Tap to start. Controls: <br><br>" +
-                                    "<b>Tap</b>: Move to the next panel.<br>" +
-                                    "<b>Long Press</b>: Go back to the previous panel.<br>" +
-                                    "<b>Double Tap</b>: Zoom in or out on the current panel.<br>" +
-                                    "<b>Drag</b>: Pan around a zoomed panel.<br>" +
-                                    "<b>Hide Taskbar</b>: Fling panel upwards/downwards to hide/show the taskbar<br>" +
-                                    "<b>Auto Mode</b>: Enable in the menu to automatically navigate through panels.<br><br>" +
-                                    "Enjoy your reading experience. \uD83C\uDF38\uD83D\uDDE1\uFE0F"
-                            textView.text = Html.fromHtml(instructionText, Html.FROM_HTML_MODE_LEGACY)*/
+                                "<b>Tap</b>: Move to the next panel.<br>" +
+                                "<b>Long Press</b>: Go back to the previous panel.<br>" +
+                                "<b>Double Tap</b>: Zoom in or out on the current panel.<br>" +
+                                "<b>Drag</b>: Pan around a zoomed panel.<br>" +
+                                "<b>Hide Taskbar</b>: Fling panel upwards/downwards to hide/show the taskbar<br>" +
+                                "<b>Auto Mode</b>: Enable in the menu to automatically navigate through panels.<br><br>" +
+                                "Enjoy your reading experience. \uD83C\uDF38\uD83D\uDDE1\uFE0F"
+                        textView.text = Html.fromHtml(instructionText, Html.FROM_HTML_MODE_LEGACY)*/
 
 
                             /*val size = panelList.size
-                            indexPanel--
-                            imageView.setOnClickListener {
-                                indexPanel++
-                                imageView.setImageBitmap(panelList[indexPanel%size])
-                                Log.d("imageViewListener", (indexPanel%size).toString())
-                                textView.visibility = View.GONE
+                        indexPanel--
+                        imageView.setOnClickListener {
+                            indexPanel++
+                            imageView.setImageBitmap(panelList[indexPanel%size])
+                            Log.d("imageViewListener", (indexPanel%size).toString())
+                            textView.visibility = View.GONE
+                        }
+                        imageView.setOnLongClickListener{
+                            if(indexPanel>0) {
+                                indexPanel--
+                            } else {
+                                val message = "Erste Seite erreicht."
+                                val toast = Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
+                                toast.show()
                             }
-                            imageView.setOnLongClickListener{
-                                if(indexPanel>0) {
-                                    indexPanel--
-                                } else {
-                                    val message = "Erste Seite erreicht."
-                                    val toast = Toast.makeText(applicationContext, message, Toast.LENGTH_LONG)
-                                    toast.show()
-                                }
-                                imageView.setImageBitmap(panelList[indexPanel%size])
-                                Log.d("imageViewListener", (indexPanel%size).toString())
-                                true
-                            }*/
+                            imageView.setImageBitmap(panelList[indexPanel%size])
+                            Log.d("imageViewListener", (indexPanel%size).toString())
+                            true
+                        }*/
                         }
 
 
-
-
+                    }
 
 
                 }
-
-
-
+            } else {
+                // Handle case when user cancels folder selection
             }
-        } else {
-            // Handle case when user cancels folder selection
         }
-    }
 
     override fun onCreate(savedInstanceState: nBundle?) {
         super.onCreate(savedInstanceState)
@@ -283,10 +289,15 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         val translucentColor = ColorUtils.setAlphaComponent(color, (0.65f * 255).toInt()) // 128 = 50%
         toolbar.setBackgroundColor(translucentColor)*/
 
-        val baseColor = MaterialColors.getColor(toolbar, com.google.android.material.R.attr.colorPrimaryInverse, Color.DKGRAY)
+        val baseColor = MaterialColors.getColor(
+            toolbar,
+            com.google.android.material.R.attr.colorPrimaryInverse,
+            Color.DKGRAY
+        )
 
         // Transparente Varianten erzeugen
-        val startColor = ColorUtils.setAlphaComponent(baseColor, (1.0f * 255).toInt())  // 65% Deckkraft
+        val startColor =
+            ColorUtils.setAlphaComponent(baseColor, (1.0f * 255).toInt())  // 65% Deckkraft
         val endColor = ColorUtils.setAlphaComponent(baseColor, 0)  // Voll transparent
 
         // GradientDrawable erzeugen
@@ -318,7 +329,6 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
         //window.statusBarColor = ContextCompat.getColor(this, R.color.status_bar_dark)
 
 
-
         // Initialisiere die ProgressBar
         progressBar = findViewById(R.id.progressBar)
 
@@ -333,62 +343,74 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
 
         //Log.d("onviewcreated", "before")
         //openFolderPicker()
-        //Log.d("onviewcreated", "after")                  
-
+        //Log.d("onviewcreated", "after")
 
 
 // Initialisiere GestureDetector für DoubleTap und SingleTap
-        val gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onLongPress(e: MotionEvent) {
-                if(!isZoomed && !isDragging) {
-                    /*if (indexPanel>0) indexPanel--
+        val gestureDetector =
+            GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
+                override fun onLongPress(e: MotionEvent) {
+                    if (!isZoomed && !isDragging) {
+                        /*if (indexPanel>0) indexPanel--
                     //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
                     Handler(Looper.getMainLooper()).postDelayed({
                     crossfadePanel(panelList[indexPanel], binding.imageView2)
                     }, 300)*/
-                    onManualPanelBack()
-                    textView.visibility = View.GONE
+                        binding.imageView2.scaleX = 1f
+                        binding.imageView2.scaleY = 1f
+                        binding.imageView2.translationX = 0f
+                        binding.imageView2.translationY = 0f
+                        currentScale = 1f
+                        onManualPanelBack()
+                        textView.visibility = View.GONE
+                    }
+
+                    super.onLongPress(e)
                 }
 
-                super.onLongPress(e)
-            }
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    currentZoomState = when (currentZoomState) {
+                        ZoomState.DEFAULT -> {
+                            // Zoom auf 2.0f
+                            binding.imageView2.scaleX = 2.0f
+                            binding.imageView2.scaleY = 2.0f
+                            ZoomState.ZOOMED_IN
+                        }
 
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                currentZoomState = when (currentZoomState) {
-                    ZoomState.DEFAULT -> {
-                        // Zoom auf 2.0f
-                        binding.imageView2.scaleX = 2.0f
-                        binding.imageView2.scaleY = 2.0f
-                        ZoomState.ZOOMED_IN
+                        ZoomState.ZOOMED_IN -> {
+                            // Wechsel zur FullPage-Ansicht
+                            switchToFullPageView()
+                            ZoomState.FULL_PAGE
+                        }
+
+                        ZoomState.FULL_PAGE -> {
+                            // Zurück auf 1.0f
+                            binding.imageView2.scaleX = 1.0f
+                            binding.imageView2.scaleY = 1.0f
+                            ZoomState.DEFAULT
+                        }
                     }
-                    ZoomState.ZOOMED_IN -> {
-                        // Wechsel zur FullPage-Ansicht
-                        switchToFullPageView()
-                        ZoomState.FULL_PAGE
-                    }
-                    ZoomState.FULL_PAGE -> {
-                        // Zurück auf 1.0f
-                        binding.imageView2.scaleX = 1.0f
-                        binding.imageView2.scaleY = 1.0f
-                        ZoomState.DEFAULT
-                    }
-                }
-                return true
-            }
-
-
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
-                isLongPress = false // Setze isLongPress zurück
-
-                if (!isDragging && e.eventTime - e.downTime < ViewConfiguration.getLongPressTimeout()) {
-                    onManualPanelSwitch() // Panel-Wechsel über die neue Methode
+                    return true
                 }
 
-                return true
-            }
 
-            /*override fun onScroll(
+                override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                    longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+                    isLongPress = false // Setze isLongPress zurück
+
+                    if (!isDragging && e.eventTime - e.downTime < ViewConfiguration.getLongPressTimeout()) {
+                        binding.imageView2.scaleX = 1f
+                        binding.imageView2.scaleY = 1f
+                        binding.imageView2.translationX = 0f
+                        binding.imageView2.translationY = 0f
+                        currentScale = 1f
+                        onManualPanelSwitch() // Panel-Wechsel über die neue Methode
+                    }
+
+                    return true
+                }
+
+                /*override fun onScroll(
                 e1: MotionEvent?,
                 e2: MotionEvent,
                 distanceX: Float,
@@ -409,74 +431,80 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
                 return false
             }*/
 
-            override fun onFling(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                velocityX: Float,
-                velocityY: Float
-            ): Boolean {
-                // Fling (schnelle vertikale Bewegung): Toolbar ein-/ausblenden
-                if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) && kotlin.math.abs(velocityY) > 300) {
-                    isSwiping = true // Swipe erkannt
-                    if (velocityY > 0 && !isToolbarVisible) {
-                        // Nach unten wischen: Toolbar einblenden
-                        //toggleToolbar()
-                        toggleToolbarAnimated()
-                    } else if (velocityY < 0 && isToolbarVisible) {
-                        // Nach oben wischen: Toolbar ausblenden
-                        //toggleToolbar()
-                        toggleToolbarAnimated()
+                override fun onFling(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float
+                ): Boolean {
+                    // Fling (schnelle vertikale Bewegung): Toolbar ein-/ausblenden
+                    if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) && kotlin.math.abs(
+                            velocityY
+                        ) > 300
+                    ) {
+                        isSwiping = true // Swipe erkannt
+                        if (velocityY > 0 && !isToolbarVisible) {
+                            // Nach unten wischen: Toolbar einblenden
+                            //toggleToolbar()
+                            toggleToolbarAnimated()
+                        } else if (velocityY < 0 && isToolbarVisible) {
+                            // Nach oben wischen: Toolbar ausblenden
+                            //toggleToolbar()
+                            toggleToolbarAnimated()
+                        }
+                        // Nach dem Touch-Event Swipe zurücksetzen
+                        if (e2.action == MotionEvent.ACTION_UP || e2.action == MotionEvent.ACTION_CANCEL) {
+                            isSwiping = false
+                        }
+                        return true
                     }
-                    // Nach dem Touch-Event Swipe zurücksetzen
-                    if (e2.action == MotionEvent.ACTION_UP || e2.action == MotionEvent.ACTION_CANCEL) {
-                        isSwiping = false
-                    }
-                    return true
+                    return false
                 }
-                return false
-            }
-        })
+            })
 
         // Pinch-Zooming
-        val scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                isZoomed = true
-                return super.onScaleBegin(detector)
-            }
-
-            override fun onScaleEnd(detector: ScaleGestureDetector) {
-                isZoomed = false
-                super.onScaleEnd(detector)
-            }
-
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                targetScaleFactor *= detector.scaleFactor
-                targetScaleFactor = Math.max(0.5f, Math.min(targetScaleFactor, 3.0f))
-
-                // Entferne eventuell anstehende Zoom-Updates
-                pendingZoomRunnable?.let { zoomHandler.removeCallbacks(it) }
-
-                pendingZoomRunnable = Runnable {
-                    binding.imageView2.scaleX = targetScaleFactor
-                    binding.imageView2.scaleY = targetScaleFactor
-
-                    // Wechsel zur Ganzseitenansicht, wenn der Zoom unter 0.8 fällt
-                    if (targetScaleFactor < 0.8f) {
-                        switchToFullPageView()
-                    }
+        val scaleGestureDetector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    binding.imageView2.pivotX = detector.focusX
+                    binding.imageView2.pivotY = detector.focusY
+                    isZoomed = true
+                    return super.onScaleBegin(detector)
                 }
-                zoomHandler.postDelayed(pendingZoomRunnable!!, 50)
 
-                return true
-            }
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    isZoomed = false
+                    super.onScaleEnd(detector)
+                }
+
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+
+                    val scaleFactor = detector.scaleFactor
+                    var newScale = (currentScale * scaleFactor).coerceIn(0.5f, 3.0f)
+
+                    // 🔹 Wenn kleiner als 0.8 → ganze Seite zeigen
+                    if (newScale < 0.8f) {
+                        newScale = 1f
+                        binding.imageView2.translationX = 0f
+                        binding.imageView2.translationY = 0f
+                    }
+
+                    // 🔹 Smooth Zoom (Lerp) für weniger Jitter
+                    binding.imageView2.scaleX = lerp(binding.imageView2.scaleX, newScale, 0.3f)
+                    binding.imageView2.scaleY = lerp(binding.imageView2.scaleY, newScale, 0.3f)
+
+                    currentScale = newScale
+                    return true
+                }
 
 
-
-        })
+            })
 
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         isDragging = false
-        val dragThreshold = 100 // Pixel, die das Panel über den sichtbaren Bereich hinaus bewegt werden kann
+        val dragThreshold =
+            100 // Pixel, die das Panel über den sichtbaren Bereich hinaus bewegt werden kann
 
 
         // Setze den OnTouchListener für das ImageView
@@ -486,119 +514,155 @@ class MainActivity : AppCompatActivity(), LifecycleObserver {
             scaleGestureDetector.onTouchEvent(event)
 
 
-if(!isZoomed) {
-    val panelWidth = view.width
-    val panelHeight = view.height
-    val dragThreshold = Math.max(panelWidth, panelHeight) * 0.45f // Beispiel: 10% der Panelgröße
+            // 2️⃣ Drag für vergrößertes Panel
+            handleDrag(event, view)
 
-    when (event.action) {
-        MotionEvent.ACTION_DOWN -> {
-            lastTouchX = event.rawX
-            lastTouchY = event.rawY
-            dX = view.x - lastTouchX
-            dY = view.y - lastTouchY
+            // 3️⃣ LongPress & Panel-Swipe
+            handleLongPressAndSwipe(event, view)
 
-            isDragging = false
-            isLongPress = true // Setze isLongPress auf true
-            longPressHandler = Handler()
-            longPressHandler?.postDelayed({
-                if (isLongPress == true && isDragging == false) {
-                    // Trigger Long-Press Aktion hier
-                    if (indexPanel>0) indexPanel--
-                    //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        crossfadePanel(panelList[indexPanel], binding.imageView2)
-                    }, 300)
-                    textView.visibility = View.GONE
-                }
-            }, longClickDuration)
-        }
+            /*
+            when (event.actionMasked) {
 
-        MotionEvent.ACTION_MOVE -> {
-            // Drag-and-Drop nur erlauben, wenn kein Swipe aktiv ist
-            if (!isSwiping) {
-                val deltaX = event.rawX - lastTouchX
-                val deltaY = event.rawY - lastTouchY
-
-                if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
-                    isDragging = true // Dragging erkannt
-
+                MotionEvent.ACTION_DOWN -> {
+                    lastX = event.rawX
+                    lastY = event.rawY
+                    isDragging = currentScale > 1f
                 }
 
-                if (isDragging) {
-                    // Berechne die neue Position
-                    val newX = event.rawX + dX
-                    val newY = event.rawY + dY
+                MotionEvent.ACTION_MOVE -> {
+                    if (isDragging) {
 
-                    // Einschränkung der neuen Position
-                    val viewWidth = view.width
-                    val viewHeight = view.height
-                    val parentWidth = (view.parent as View).width
-                    val parentHeight = (view.parent as View).height
+                        val dx = event.rawX - lastX
+                        val dy = event.rawY - lastY
 
-                    // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
-                    val minX = -dragThreshold
-                    val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
-                    val minY = -dragThreshold
-                    val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
+                        binding.imageView2.translationX += dx
+                        binding.imageView2.translationY += dy
 
-                    // Begrenzen der X-Position
-                    val constrainedX = when {
-                        newX < minX -> minX // links
-                        newX > maxX -> maxX // rechts
-                        else -> newX // innerhalb der Grenzen
+                        lastX = event.rawX
+                        lastY = event.rawY
                     }
-
-                    // Begrenzen der Y-Position
-                    val constrainedY = when {
-                        newY < minY -> minY // oben
-                        newY > maxY -> maxY // unten
-                        else -> newY // innerhalb der Grenzen
-                    }
-
-                    // Setze die neue Position des ImageView
-                    view.animate()
-                        .x(constrainedX)
-                        .y(constrainedY)
-                        .setDuration(0)
-                        .start()
                 }
 
-                // Nach dem Touch-Event Swipe zurücksetzen
-                if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                    isSwiping = false
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    isDragging = false
                 }
             }
 
 
-        }
+            if(!isZoomed) {
+                val panelWidth = view.width
+                val panelHeight = view.height
+                val dragThreshold = Math.max(panelWidth, panelHeight) * 0.45f // Beispiel: 10% der Panelgröße
 
-        MotionEvent.ACTION_UP -> {
-            view.isPressed = false
-            longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        lastTouchX = event.rawX
+                        lastTouchY = event.rawY
+                        dX = view.x - lastTouchX
+                        dY = view.y - lastTouchY
 
-            isLongPress = false // Setze isLongPress zurück
-            isDragging = false
-            if (!isDragging) {
-                // Hier wird nur ein Klick behandelt
-                /* if (event.eventTime - event.downTime < ViewConfiguration.getLongPressTimeout()) {
-                             // Wechsel zum nächsten Panel
-                             imageView.scaleX = 1f
-                             imageView.scaleY = 1f
-                             imageView.translationX = 0f
-                             imageView.translationY = 0f
-                             indexPanel++
-                             imageView.setImageBitmap(panelList[indexPanel % panelList.size])
-                             textView.visibility = View.GONE
-                         }*/
+                        isDragging = false
+                        isLongPress = true // Setze isLongPress auf true
+                        longPressHandler = Handler()
+                        longPressHandler?.postDelayed({
+                            if (isLongPress == true && isDragging == false) {
+                                // Trigger Long-Press Aktion hier
+                                if (indexPanel>0) indexPanel--
+                                //imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    crossfadePanel(panelList[indexPanel], binding.imageView2)
+                                }, 300)
+                                textView.visibility = View.GONE
+                            }
+                        }, longClickDuration)
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        // Drag-and-Drop nur erlauben, wenn kein Swipe aktiv ist
+                        if (!isSwiping) {
+                            val deltaX = event.rawX - lastTouchX
+                            val deltaY = event.rawY - lastTouchY
+
+                            if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
+                                isDragging = true // Dragging erkannt
+
+                            }
+
+                            if (isDragging) {
+                                // Berechne die neue Position
+                                val newX = event.rawX + dX
+                                val newY = event.rawY + dY
+
+                                // Einschränkung der neuen Position
+                                val viewWidth = view.width
+                                val viewHeight = view.height
+                                val parentWidth = (view.parent as View).width
+                                val parentHeight = (view.parent as View).height
+
+                                // Berechne den Sichtbereich unter Berücksichtigung der Schwellenwerte
+                                val minX = -dragThreshold
+                                val maxX = (parentWidth + dragThreshold - viewWidth).toFloat()
+                                val minY = -dragThreshold
+                                val maxY = (parentHeight + dragThreshold - viewHeight).toFloat()
+
+                                // Begrenzen der X-Position
+                                val constrainedX = when {
+                                    newX < minX -> minX // links
+                                    newX > maxX -> maxX // rechts
+                                    else -> newX // innerhalb der Grenzen
+                                }
+
+                                // Begrenzen der Y-Position
+                                val constrainedY = when {
+                                    newY < minY -> minY // oben
+                                    newY > maxY -> maxY // unten
+                                    else -> newY // innerhalb der Grenzen
+                                }
+
+                                // Setze die neue Position des ImageView
+                                view.animate()
+                                    .x(constrainedX)
+                                    .y(constrainedY)
+                                    .setDuration(0)
+                                    .start()
+                            }
+
+                            // Nach dem Touch-Event Swipe zurücksetzen
+                            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                                isSwiping = false
+                            }
+                        }
+
+
+                    }
+
+                    MotionEvent.ACTION_UP -> {
+                        view.isPressed = false
+                        longPressHandler?.removeCallbacksAndMessages(null) // Stoppe den Long-Press Timer
+
+                        isLongPress = false // Setze isLongPress zurück
+                        isDragging = false
+                        if (!isDragging) {
+                            // Hier wird nur ein Klick behandelt
+                            /* if (event.eventTime - event.downTime < ViewConfiguration.getLongPressTimeout()) {
+                                         // Wechsel zum nächsten Panel
+                                         imageView.scaleX = 1f
+                                         imageView.scaleY = 1f
+                                         imageView.translationX = 0f
+                                         imageView.translationY = 0f
+                                         indexPanel++
+                                         imageView.setImageBitmap(panelList[indexPanel % panelList.size])
+                                         textView.visibility = View.GONE
+                                     }*/
+                        }
+                    }
+                }
             }
-        }
-    }
-}
+
+ */
             true
         }
-
-
 
 
         // OnClick und OnLongClickListener wie zuvor
@@ -654,11 +718,14 @@ if(!isZoomed) {
     }
 
     fun processPages(folder: DocumentFile) {
-        var currentMessage = "" // ganz oben in deiner Methode oder als Feld in der Klasse definieren
+        var currentMessage =
+            "" // ganz oben in deiner Methode oder als Feld in der Klasse definieren
 
         val imageExtensions = listOf("jpg", "jpeg", "png", "webp")
         val pages = folder.listFiles()
-            .filter { it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions }
+            .filter {
+                it.isFile && it.name?.substringAfterLast(".")?.lowercase() in imageExtensions
+            }
             .sortedBy { it.name }
 
         val deepPanel = DeepPanel()
@@ -674,7 +741,8 @@ if(!isZoomed) {
                 "\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38\uD83C\uDF38"
             )
 
-            val messageStep = if (pages.size < katanaMessages.size) 1 else pages.size / katanaMessages.size
+            val messageStep =
+                if (pages.size < katanaMessages.size) 1 else pages.size / katanaMessages.size
 
             pages.forEachIndexed { index, page ->
                 // 🪶 Statusmeldung abhängig vom Fortschritt
@@ -707,12 +775,20 @@ if(!isZoomed) {
                     .thenBy { if (isReadingRightToLeft) -it.right else it.left })
 
                 sortedPanels.forEach { panel ->
-                    Log.d("DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
+                    Log.d(
+                        "DeepPanel", """Left: ${panel.left}, Top: ${panel.top}
                     |Right: ${panel.right}, Bottom: ${panel.bottom}
                     |Width: ${panel.width}, Height: ${panel.height}
-                    """.trimMargin())
+                    """.trimMargin()
+                    )
 
-                    val panelBitmap = Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
+                    val panelBitmap = Bitmap.createBitmap(
+                        bitmap,
+                        panel.left,
+                        panel.top,
+                        panel.width,
+                        panel.height
+                    )
                     panelList.add(panelBitmap)
                     fullPageList.add(bitmap)
                 }
@@ -739,7 +815,7 @@ if(!isZoomed) {
 
                     if (file != null) {
                         Log.d("File", "Name: $fileName, Size: $fileSize bytes")
-                        if(fileName?.get(0)!!.isDigit()) {
+                        if (fileName?.get(0)!!.isDigit()) {
                             pageList.add(file)
                         }
                     }
@@ -752,7 +828,7 @@ if(!isZoomed) {
 
             pageList.sortBy { it.name }
             // Zugriff auf pageList hier nach dem Hinzufügen der Dateien
-            Log.d("pageListsize",pageList.size.toString())
+            Log.d("pageListsize", pageList.size.toString())
             for (page in pageList) {
                 page.name?.let { Log.d("pageList", it) }
             }
@@ -784,7 +860,13 @@ if(!isZoomed) {
             """.trimMargin()
                     )
                     panelList.add(
-                        Bitmap.createBitmap(bitmap, panel.left, panel.top, panel.width, panel.height)
+                        Bitmap.createBitmap(
+                            bitmap,
+                            panel.left,
+                            panel.top,
+                            panel.width,
+                            panel.height
+                        )
                     )
                 }
             }
@@ -823,47 +905,55 @@ if(!isZoomed) {
                 //toggleToolbarAnimated()
                 true
             }
+
             R.id.action_option2 -> {
                 // Aktion für Option 2 - Zeige den Farbwähldialog an
                 showColorPickerDialog()
                 //toggleToolbarAnimated()
                 true
             }
+
             R.id.menu_save_panel -> {
                 saveCurrentPanel()
                 //toggleToolbarAnimated()
                 return true
             }
+
             R.id.action_save_panels -> {
                 saveAllPanels()
                 true
             }
+
             R.id.action_save_large_panels -> {
                 saveLargePanelsOnly()
                 true
             }
+
             R.id.action_set_multiplier -> {
                 showMultiplierDialog()
                 //toggleToolbarAnimated()
                 true
             }
+
             R.id.action_auto_switch -> {
                 // Aktion für "Automatischer Panel-Wechsel"
                 togglePanelSwitching(item)
                 //toggleToolbarAnimated()
                 return true
             }
+
             R.id.action_toggle_reading_direction -> {
                 toggleReadingDirection()
                 //toggleToolbarAnimated()
                 true
             }
+
             R.id.action_jump_to -> {
                 showJumpToDialog()
                 //toggleToolbarAnimated()
                 return true
             }
-            
+
             else -> super.onOptionsItemSelected(item)
         }
 
@@ -885,12 +975,16 @@ if(!isZoomed) {
                     put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels")
                 }
 
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                val uri =
+                    contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                 uri?.let { contentResolver.openOutputStream(it) }
                     ?: throw IOException("Error occurred while creating file")
             } else {
                 // Für ältere Android-Versionen (vor API 29)
-                val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels")
+                val directory = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    "MangaPanels"
+                )
                 if (!directory.exists()) {
                     directory.mkdirs()
                 }
@@ -917,7 +1011,8 @@ if(!isZoomed) {
         val seekBarRed = dialogView.findViewById<SeekBar>(R.id.seekBarRed)
         val seekBarGreen = dialogView.findViewById<SeekBar>(R.id.seekBarGreen)
         val seekBarBlue = dialogView.findViewById<SeekBar>(R.id.seekBarBlue)
-        val seekBarAlpha = dialogView.findViewById<SeekBar>(R.id.seekBarAlpha) // Neue SeekBar für Alpha
+        val seekBarAlpha =
+            dialogView.findViewById<SeekBar>(R.id.seekBarAlpha) // Neue SeekBar für Alpha
         val colorPreview = dialogView.findViewById<View>(R.id.colorPreview)
 
         var red = 0
@@ -1102,7 +1197,8 @@ if(!isZoomed) {
         val maxExtraTime = 10000L   // Bis zu 16 Sekunden Zusatzzeit möglich
 
         // Wurzel der Fläche, normiert auf typische Manga-Panelgrößen
-        val normalizedArea = (area / 1_000_000.0).coerceIn(0.1, 3.0) // typisches Manga-Panel: 0.1M–3M Pixel
+        val normalizedArea =
+            (area / 1_000_000.0).coerceIn(0.1, 3.0) // typisches Manga-Panel: 0.1M–3M Pixel
 
         // Zeit basierend auf Wurzel, damit große Panels weniger extrem eskalieren
         val areaFactor = Math.sqrt(normalizedArea)
@@ -1122,7 +1218,10 @@ if(!isZoomed) {
 
         val finalTime = ((minBaseTime + dynamicTime) * aspectMultiplier * timerMultiplier).toLong()
 
-        Log.d("SmoothDelay", "Area: $area, Normalized: $normalizedArea, BaseTime: ${minBaseTime + dynamicTime}, Final: $finalTime ms")
+        Log.d(
+            "SmoothDelay",
+            "Area: $area, Normalized: $normalizedArea, BaseTime: ${minBaseTime + dynamicTime}, Final: $finalTime ms"
+        )
 
         return finalTime
     }
@@ -1174,8 +1273,9 @@ if(!isZoomed) {
                         showNextPanel()
 
                         val nextBitmap = panelList[indexPanel % panelList.size]
-                        val nextDuration = calculateTimeForPanel(nextBitmap) // 🧠 Neue Dauer berechnen!
-                        val next = nextDuration/1000.00
+                        val nextDuration =
+                            calculateTimeForPanel(nextBitmap) // 🧠 Neue Dauer berechnen!
+                        val next = nextDuration / 1000.00
                         Log.d("SmoothDelay", "Next Duration: $next")
 
                         startProgressBarAnimation(nextDuration) // Jetzt wird's dynamisch 🎉
@@ -1196,7 +1296,6 @@ if(!isZoomed) {
     }
 
 
-
     private fun showNextPanel() {
         Log.d("showNextPanel", "Next")
         binding.imageView2.scaleX = 1f
@@ -1208,8 +1307,6 @@ if(!isZoomed) {
         crossfadePanel(panelList[indexPanel % panelList.size], binding.imageView2)
         textView.visibility = View.GONE
     }
-
-
 
 
     fun onManualPanelSwitch() {
@@ -1234,8 +1331,6 @@ if(!isZoomed) {
             restartPanelSwitching()
         }
     }
-
-
 
 
     fun animateProgressBar() {
@@ -1300,7 +1395,8 @@ if(!isZoomed) {
                         val nextBitmap = panelList[indexPanel]
                         crossfadePanel(nextBitmap, binding.imageView2)
 
-                        val nextDuration = calculateTimeForPanel(nextBitmap) // 🧠 Hier neu berechnen!
+                        val nextDuration =
+                            calculateTimeForPanel(nextBitmap) // 🧠 Hier neu berechnen!
                         Log.d("AutoPlay", "Next panel delay: $nextDuration ms")
 
                         startProgressBarAnimation(nextDuration)
@@ -1325,11 +1421,13 @@ if(!isZoomed) {
     }
 
 
-
     private fun resumeProgressBarAnimation() {
         Log.d("PanelSwitch", "Animation fortsetzen") // Log beim Fortsetzen
         if (!isPaused || !isPanelSwitchingActive) {
-            Log.d("PanelSwitch", "Fortsetzung abgebrochen - Pausiert oder Inaktiv") // Log, wenn nicht fortgesetzt wird
+            Log.d(
+                "PanelSwitch",
+                "Fortsetzung abgebrochen - Pausiert oder Inaktiv"
+            ) // Log, wenn nicht fortgesetzt wird
             return
         }
         isPaused = false // Setze das Pausen-Flag zurück
@@ -1389,10 +1487,10 @@ if(!isZoomed) {
     }
 
     override fun onStart() {
-            super.onStart()
-            loadAppOpenAd(this)
-            showAppOpenAd(this)
-        }
+        super.onStart()
+        loadAppOpenAd(this)
+        showAppOpenAd(this)
+    }
 
     private fun showMultiplierDialog() {
         val dialog = AlertDialog.Builder(this)
@@ -1409,9 +1507,11 @@ if(!isZoomed) {
                 val multiplier = userInput.toFloatOrNull() ?: 1.0f
                 if (multiplier in 0.5f..3.0f) {
                     timerMultiplier = multiplier
-                    Toast.makeText(this, "Timer Speed set to x$timerMultiplier", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Timer Speed set to x$timerMultiplier", Toast.LENGTH_SHORT)
+                        .show()
                 } else {
-                    Toast.makeText(this, "Value must be between 0.5 and 3.0", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Value must be between 0.5 and 3.0", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         }
@@ -1451,7 +1551,6 @@ if(!isZoomed) {
             enterImmersiveMode()
 
 
-
         } else {
 
             // Sichtbar machen
@@ -1475,10 +1574,14 @@ if(!isZoomed) {
 
     private fun getActionBarView(): View? {
         val decorView = window.decorView as ViewGroup
-        return decorView.findViewById<View>(resources.getIdentifier("action_bar_container", "id", "android"))
+        return decorView.findViewById<View>(
+            resources.getIdentifier(
+                "action_bar_container",
+                "id",
+                "android"
+            )
+        )
     }
-
-
 
 
     private fun hideSystemUI() {
@@ -1640,7 +1743,8 @@ if(!isZoomed) {
     }
 
     fun animateProgressBarTo(progressBar: ProgressBar, targetProgress: Int) {
-        val animation = ObjectAnimator.ofInt(progressBar, "progress", progressBar.progress, targetProgress)
+        val animation =
+            ObjectAnimator.ofInt(progressBar, "progress", progressBar.progress, targetProgress)
         animation.duration = 500  // Dauer der Animation in ms
         animation.interpolator = DecelerateInterpolator()
         animation.start()
@@ -1695,11 +1799,17 @@ if(!isZoomed) {
                             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels")
                         }
 
-                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        val uri = contentResolver.insert(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            values
+                        )
                         uri?.let { contentResolver.openOutputStream(it) }
                             ?: throw IOException("Fehler beim Erstellen der Datei")
                     } else {
-                        val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels")
+                        val directory = File(
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                            "MangaPanels"
+                        )
                         if (!directory.exists()) directory.mkdirs()
                         val file = File(directory, filename)
                         FileOutputStream(file)
@@ -1743,14 +1853,23 @@ if(!isZoomed) {
                         val values = ContentValues().apply {
                             put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaPanels/LargeOnly")
+                            put(
+                                MediaStore.Images.Media.RELATIVE_PATH,
+                                "Pictures/MangaPanels/LargeOnly"
+                            )
                         }
 
-                        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        val uri = contentResolver.insert(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            values
+                        )
                         uri?.let { contentResolver.openOutputStream(it) }
                             ?: throw IOException("Fehler beim Erstellen der Datei")
                     } else {
-                        val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "MangaPanels/LargeOnly")
+                        val directory = File(
+                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                            "MangaPanels/LargeOnly"
+                        )
                         if (!directory.exists()) directory.mkdirs()
                         val file = File(directory, filename)
                         FileOutputStream(file)
@@ -1777,5 +1896,95 @@ if(!isZoomed) {
         }
     }
 
+    private fun handleDrag(event: MotionEvent, view: View) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastX = event.rawX
+                lastY = event.rawY
+                isDragging = currentScale > 1f
+            }
 
+            MotionEvent.ACTION_MOVE -> {
+                if (isDragging) {
+                    val dx = event.rawX - lastX
+                    val dy = event.rawY - lastY
+
+                    binding.imageView2.translationX += dx
+                    binding.imageView2.translationY += dy
+
+                    lastX = event.rawX
+                    lastY = event.rawY
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isDragging = false
+            }
+        }
+    }
+
+    private fun handleLongPressAndSwipe(event: MotionEvent, view: View) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchX = event.rawX
+                lastTouchY = event.rawY
+                dX = view.x - lastTouchX
+                dY = view.y - lastTouchY
+
+                isLongPress = true
+                longPressHandler = Handler()
+                longPressHandler?.postDelayed({
+                    if (isLongPress && !isDragging) {
+                        // Panel zurück
+                        if (indexPanel > 0) indexPanel--
+                        crossfadePanel(panelList[indexPanel], binding.imageView2)
+                        textView.visibility = View.GONE
+                    }
+                }, longClickDuration)
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (!isSwiping) {
+                    val deltaX = event.rawX - lastTouchX
+                    val deltaY = event.rawY - lastTouchY
+                    if (!isDragging && (Math.abs(deltaX) > touchSlop || Math.abs(deltaY) > touchSlop)) {
+                        isDragging = true
+                    }
+                    if (isDragging) {
+                        dragViewWithinBounds(view, event.rawX + dX, event.rawY + dY)
+                    }
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                view.isPressed = false
+                longPressHandler?.removeCallbacksAndMessages(null)
+                isLongPress = false
+                isDragging = false
+                isSwiping = false
+            }
+        }
+    }
+
+    private fun dragViewWithinBounds(view: View, newX: Float, newY: Float) {
+        val dragThreshold = Math.max(view.width, view.height) * 0.45f
+        val parent = view.parent as View
+        val minX = -dragThreshold
+        val maxX = parent.width - view.width + dragThreshold
+        val minY = -dragThreshold
+        val maxY = parent.height - view.height + dragThreshold
+
+        val constrainedX = newX.coerceIn(minX, maxX.toFloat())
+        val constrainedY = newY.coerceIn(minY, maxY.toFloat())
+
+        view.animate()
+            .x(constrainedX)
+            .y(constrainedY)
+            .setDuration(0)
+            .start()
+    }
+
+    private fun lerp(start: Float, end: Float, fraction: Float): Float {
+        return start + (end - start) * fraction
+    }
 }

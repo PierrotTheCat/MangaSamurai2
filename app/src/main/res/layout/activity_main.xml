@@ -9,6 +9,8 @@
     android:visibility="visible"
     tools:visibility="visible">
 
+    <include layout="@layout/menu_resume_button"/>
+
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/nav_view"
         android:layout_width="0dp"
